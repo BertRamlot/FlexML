@@ -1,4 +1,6 @@
 **/*.jpg
 **/*.csv
 **/*.pth
+**/*.zip
+**/*.7z
 /__pycache__
