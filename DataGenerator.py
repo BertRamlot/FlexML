@@ -3,16 +3,14 @@ import cv2
 import ctypes
 import random
 import csv
+import cv2
 
-from numpy import eye
-
-from EyeDetector import EyeDetector
+from FaceDetector import FaceDetector
 
 class DataGenerator():
-    def __init__(self, buffer_size: int):
-        self.img_folder = "data/raw/"
-        self.training_csv_path = "data/training_meta_data.csv"
-        self.testing_csv_path = "data/testing_meta_data.csv"
+    def __init__(self, data_folder_name: str, buffer_size: int):
+        self.img_folder = "{}/raw/".format(data_folder_name)
+        self.all_csv_path = "{}/meta_data.csv".format(data_folder_name)
         if not os.path.exists(self.img_folder):
             os.makedirs(self.img_folder)
 
@@ -21,9 +19,14 @@ class DataGenerator():
 
         user32 = ctypes.windll.user32
         self.screen_width, self.screen_heigth = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
-
-        self.eye_detector = EyeDetector()
+        
+        print("Starting camera")
+        self.cap = cv2.VideoCapture(0)
+        self.face_detector = FaceDetector(self.cap)
     
+    def exit(self):
+        self.cap.release()
+
     def flush(self) -> None:
         while self.buffer_length() > 0:
             self.save_oldest_buffer_item()
@@ -34,54 +37,60 @@ class DataGenerator():
     def buffer_length(self) -> int:
         return len(self._buffer)
 
+    @staticmethod
+    def generate_filename(parent_dir: str, x: int, y: int):
+        path = None
+        i = 0
+        while path is None or os.path.exists(parent_dir + path):
+            path = "{}_{}_{}.jpg".format(x, y, i)
+            i += 1
+        return path
+
     def save_oldest_buffer_item(self) -> None:
-        eye_pair, x, y = self._buffer[0]
+        face, x, y = self._buffer[0]
         self._buffer = self._buffer[1:]
 
-        left_eye_img_path = "L_{}_{}.jpg".format(x,y)
-        right_eye_img_path = "R_{}_{}.jpg".format(x,y)
-
-
-        meta_data = [
-            left_eye_img_path, right_eye_img_path,
-            round(x/self.screen_width,4),
-            round(y/self.screen_heigth,4), 
-            round(eye_pair.left_eye.x/self.screen_width,4), 
-            round(eye_pair.left_eye.y/self.screen_heigth,4), 
-            round(eye_pair.left_eye.w/self.screen_width,4), 
-            round(eye_pair.left_eye.h/self.screen_heigth,4),
-            round(eye_pair.right_eye.x/self.screen_width,4), 
-            round(eye_pair.right_eye.y/self.screen_heigth,4), 
-            round(eye_pair.right_eye.w/self.screen_width,4), 
-            round(eye_pair.right_eye.h/self.screen_heigth,4)
-            ]
-
-        # Saving meta data to csv
-        csv_path = self.training_csv_path if random.random() < 0.9 else self.testing_csv_path
-        file_exists = os.path.isfile(csv_path)
-        with open(csv_path, "a+", newline='',encoding="UTF8") as f:
-            writer = csv.writer(f)
-            if not file_exists:
-                writer.writerow([
-                    'left_eye_file_name', 'right_eye_file_name', 'x_screen', 'y_screen', 
-                    'l_x', 'l_y', 'l_w', 'l_h',
-                    'r_x', 'r_y', 'r_w', 'r_h'
-                ])
-            writer.writerow(meta_data)
+        face_img_path = DataGenerator.generate_filename(self.img_folder, x, y)
 
         # Saving raw images
-        cv2.imwrite(self.img_folder + left_eye_img_path, eye_pair.left_eye.im)
-        cv2.imwrite(self.img_folder + right_eye_img_path, eye_pair.left_eye.im)
-    
-    
-    def register_eye_position(self, x: int, y: int) -> bool: # return true if valid eyepair(s) found
-        self.eye_detector.update()
+        cv2.imwrite(self.img_folder + face_img_path, face.im)
 
-        if not self.eye_detector.valid_eyes_found():
+        # Saving meta data to csv
+        prec = 6
+        training_percentage = 0.9
+        meta_data = [
+            0 if random.random() < training_percentage else 1,
+            face_img_path,
+            round(x/self.screen_width,  prec),
+            round(y/self.screen_heigth, prec),
+            round(face.tl_rx, prec),
+            round(face.tl_ry, prec),
+            round(face.rw, prec),
+            round(face.rh, prec)
+        ]
+        meta_data += [round(rx, prec) for rx in face.features_rx]
+        meta_data += [round(ry, prec) for ry in face.features_ry]
+
+        headers = ['testing', 'face_file_name', 'x_screen', 'y_screen', 'tl_rx', 'tl_ry', 'rw', 'rh']
+        headers += ['fx_{}'.format(i) for i in range(len(face.features_rx))]
+        headers += ['fy_{}'.format(i) for i in range(len(face.features_ry))]
+        
+        file_exists = os.path.isfile(self.all_csv_path)
+        with open(self.all_csv_path, "a+", newline='',encoding="UTF8") as f:
+            writer = csv.writer(f)
+            if not file_exists:
+                writer.writerow(headers)
+            writer.writerow(meta_data)
+
+    # return true if valid eyepair(s) found
+    def register_eye_position(self, x: int, y: int) -> bool:
+        self.face_detector.update()
+
+        if not self.face_detector.valid_faces_found():
             return False
 
-        for eye_pair in self.eye_detector.last_eye_pairs:
-            self._buffer.append((eye_pair, x, y))
+        for face in self.face_detector.last_faces:
+            self._buffer.append((face, x, y))
 
         if self.buffer_length() >= self.buffer_size:
             self.save_oldest_buffer_item()

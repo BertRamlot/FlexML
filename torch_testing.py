@@ -1,12 +1,12 @@
 import os
 import matplotlib.pyplot as plt
-
 import torch
 from torch import nn
+from torch.optim import optimizer
 from torch.utils.data import DataLoader
-from torchvision.transforms import Lambda
 
-from EyeNeuralNetwork import EyeNeuralNetwork, EyeDataset
+from FaceDetector import Face
+from FaceNeuralNetwork import FaceNeuralNetwork, FaceDataset
 
 def train_loop(dataloader, model, loss_fn, optimizer):
     num_batches = len(dataloader)
@@ -15,7 +15,7 @@ def train_loop(dataloader, model, loss_fn, optimizer):
     for batch, (X, y) in enumerate(dataloader):
         # Compute prediction and loss
         pred = model(X)
-        loss = loss_fn(pred, y)
+        loss = loss_fn(torch.clamp(pred, min=0.0, max=1.0), y)
         train_loss += loss.item()
         
         # Backpropagation
@@ -38,45 +38,52 @@ def test_loop(dataloader, model, loss_fn):
     with torch.no_grad():
         for X, y in dataloader:
             pred = model(X)
-            test_loss += loss_fn(pred, y).item()
+            test_loss += loss_fn(torch.clamp(pred, min=0.0, max=1.0), y).item()
 
     test_loss /= num_batches
     return test_loss
 
 def main():
-    # Selecting device
     device = 'cpu' # 'cuda' if torch.cuda.is_available() else 'cpu'
+    model_load_path = 'model_weights_3.pth'
+    model_save_path = 'model_weights_p_B.pth'
+    data_folder_name = 'data_p_B'
+    learning_rate = 1e-2
+    # loss_fn = nn.L1Loss()
+    loss_fn = nn.MSELoss()
+    max_epochs = 2001
+
     print('Using {} device'.format(device))
 
-    # Loading data
-    training_data = EyeDataset(
-        "data/training_meta_data.csv", 
-        "data/raw/",
-        device
+    # region Loading data
+    print("Loading training data set")
+    train_data = FaceDataset(
+        data_folder_name + "/meta_data.csv", 
+        data_folder_name + "/raw/",
+        device,
+        testing=False
     )
-    test_data_set = EyeDataset(
-        "data/testing_meta_data.csv", 
-        "data/raw/",
-        device
+    train_dataloader = DataLoader(train_data, batch_size=8, shuffle=True)
+    
+    print("Loading testing data set")
+    test_data_set = FaceDataset(
+        data_folder_name + "/meta_data.csv", 
+        data_folder_name + "/raw/",
+        device,
+        testing=True
     )
-    train_dataloader = DataLoader(training_data, batch_size=512, shuffle=True)
-    test_dataloader = DataLoader(test_data_set, batch_size=256, shuffle=True)
+    test_dataloader = DataLoader(test_data_set, batch_size=1, shuffle=True)
+    # endregion
 
-
-    model_load_path = 'model_weights_0.pth'
-    model_save_path = 'model_weights_0.pth'
-
-    # Initializing network
-    model = EyeNeuralNetwork().to(device)
-    learning_rate = 1e-2
-    loss_fn = nn.MSELoss()
+    # region Initialize model
+    model = FaceNeuralNetwork().to(device)
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
     epoch = 0
-    epochs = 1101
     avg_loss_training_history = []
     avg_loss_testing_history = []
 
     # loading model
+    print("{} (Loading file) -> {} (Saving file)".format(model_load_path, model_save_path))
     if model_load_path is not None and os.path.exists(model_load_path):
         print("Loading existing model!")
 
@@ -89,9 +96,11 @@ def main():
         avg_loss_testing_history = checkpoint['avg_loss_testing_history']
 
         model.train()
+    # endregion
 
-    # Training
-    while epoch < epochs:
+    # region Training
+    print("Starting training")
+    while epoch < max_epochs:
         train_loss = train_loop(train_dataloader, model, loss_fn, optimizer)
         test_loss = test_loop(test_dataloader, model, loss_fn)
         
@@ -107,27 +116,23 @@ def main():
                 'avg_loss_testing_history': avg_loss_testing_history,
                 }, model_save_path)
         
-        print(f" Epoch {epoch}: train_loss={train_loss:>8f}, test_loss={test_loss:>8f}", end='\n' if epoch % 20 == 0 or epoch == epochs else '\r')
+        print(f" Epoch {epoch}: train_loss={train_loss:>8f}, test_loss={test_loss:>8f}", end='\n' if epoch % 10 == 0 or epoch == max_epochs else '\r')
         
         epoch += 1
     print("\n\nDone!")
+    # endregion
 
-    # Plotting results
+    # region Plotting results
+
     fig, ax1 = plt.subplots()
-    color = 'tab:red'
     ax1.set_xlabel('epochs')
-    ax1.set_ylabel('avg loss training', color=color)
-    ax1.plot(list(range(len(avg_loss_training_history))), avg_loss_training_history, color=color)
-    ax1.tick_params(axis='y', labelcolor=color)
-
-    ax2 = ax1.twinx()
-    color = 'tab:blue'
-    ax2.set_ylabel('avg loss testing', color=color)
-    ax2.plot(list(range(len(avg_loss_testing_history))), avg_loss_testing_history, color=color)
-    ax2.tick_params(axis='y', labelcolor=color)
+    ax1.set_ylabel('avg loss train/test')
+    ax1.plot(list(range(len(avg_loss_training_history))), avg_loss_training_history, color='tab:red')
+    ax1.plot(list(range(len(avg_loss_testing_history))), avg_loss_testing_history, color='tab:blue')
 
     fig.tight_layout()
     plt.show()
+    # endregion
 
 if __name__ == "__main__":
     main()

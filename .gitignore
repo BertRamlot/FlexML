@@ -1,5 +1,4 @@
-/data
-/model_weights.pth
-/model_weights_0.pth
-/model_weights_prec.pth
+**/*.jpg
+**/*.csv
+**/*.pth
 /__pycache__

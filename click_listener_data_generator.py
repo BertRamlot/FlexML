@@ -5,7 +5,7 @@ from DataGenerator import DataGenerator
 
 
 def main():
-    dataGenerator = DataGenerator(5)
+    dataGenerator = DataGenerator("data_p_B", 5)
 
     prev_states = [1, 1]
     while True:
@@ -24,6 +24,7 @@ def main():
         dataGenerator.register_eye_position(x, y)
 
     dataGenerator.flush()
+    dataGenerator.exit()
 
 if __name__ == "__main__":
     main()
