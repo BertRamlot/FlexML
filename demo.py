@@ -96,7 +96,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-    window = EyeTrackingOverlay('model_weights_p_B.pth', 10)
+    window = EyeTrackingOverlay('model_weights_p_B_abs.pth', 10)
     window.showFullScreen()
     # window.exit()
     sys.exit(app.exec_())

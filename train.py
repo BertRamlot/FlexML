@@ -45,13 +45,13 @@ def test_loop(dataloader, model, loss_fn):
 
 def main():
     device = 'cpu' # 'cuda' if torch.cuda.is_available() else 'cpu'
-    model_load_path = 'model_weights_3.pth'
+    model_load_path = 'model_weights_p_B.pth'
     model_save_path = 'model_weights_p_B.pth'
     data_folder_name = 'data_p_B'
     learning_rate = 1e-2
     # loss_fn = nn.L1Loss()
     loss_fn = nn.MSELoss()
-    max_epochs = 2001
+    max_epochs = 5801
 
     print('Using {} device'.format(device))
 
