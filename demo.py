@@ -4,8 +4,8 @@ from PyQt5 import QtGui, QtWidgets, QtCore
 import cv2
 import torch
 
-from FaceNeuralNetwork import FaceDataset, FaceNeuralNetwork
-from FaceDetector import FaceDetector
+from src.FaceNeuralNetwork import FaceDataset, FaceNeuralNetwork
+from src.FaceDetector import FaceDetector
 
 
 class EyeTrackingOverlay(QtWidgets.QMainWindow):
@@ -96,7 +96,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
 
 def main():
     app = QtWidgets.QApplication(sys.argv)
-    window = EyeTrackingOverlay('model_weights_p_B_abs.pth', 10)
+    window = EyeTrackingOverlay('models/model_weights_p_B_abs.pth', 10)
     window.showFullScreen()
     # window.exit()
     sys.exit(app.exec_())

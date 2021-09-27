@@ -1,7 +1,7 @@
 import time
 import win32api
 
-from DataGenerator import DataGenerator
+from src.DataGenerator import DataGenerator
 
 
 def main():

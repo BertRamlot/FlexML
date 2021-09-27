@@ -5,7 +5,7 @@ import random
 import csv
 import cv2
 
-from FaceDetector import FaceDetector
+from src.FaceDetector import FaceDetector
 
 class DataGenerator():
     def __init__(self, data_folder_name: str, buffer_size: int):

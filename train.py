@@ -2,11 +2,10 @@ import os
 import matplotlib.pyplot as plt
 import torch
 from torch import nn
-from torch.optim import optimizer
 from torch.utils.data import DataLoader
 
-from FaceDetector import Face
-from FaceNeuralNetwork import FaceNeuralNetwork, FaceDataset
+from src.FaceNeuralNetwork import FaceNeuralNetwork, FaceDataset
+
 
 def train_loop(dataloader, model, loss_fn, optimizer):
     num_batches = len(dataloader)
@@ -45,8 +44,8 @@ def test_loop(dataloader, model, loss_fn):
 
 def main():
     device = 'cpu' # 'cuda' if torch.cuda.is_available() else 'cpu'
-    model_load_path = 'model_weights_p_B.pth'
-    model_save_path = 'model_weights_p_B.pth'
+    model_load_path = 'models/model_weights_p_B.pth'
+    model_save_path = 'models/model_weights_p_B.pth'
     data_folder_name = 'data_p_B'
     learning_rate = 1e-2
     # loss_fn = nn.L1Loss()

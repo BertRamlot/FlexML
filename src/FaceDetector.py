@@ -30,7 +30,7 @@ class FaceDetector():
         self.cap = cap
         print("Loading face/feature model")
         self.face_detector = dlib.get_frontal_face_detector()
-        self.face_feature_predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+        self.face_feature_predictor = dlib.shape_predictor("src/shape_predictor_68_face_landmarks.dat")
         self.video_width = round(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         self.video_height = round(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         print("Camera dim: ({}x{})".format(self.video_width, self.video_height))

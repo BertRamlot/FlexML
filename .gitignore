@@ -3,4 +3,4 @@
 **/*.pth
 **/*.zip
 **/*.7z
-/__pycache__
+**/__pycache__

@@ -1,6 +1,6 @@
 import cv2
 
-from FaceDetector import FaceDetector, Face
+from src.FaceDetector import FaceDetector
 
 
 def main():
