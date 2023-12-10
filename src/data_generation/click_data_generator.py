@@ -1,11 +1,17 @@
+import sys
 import time
 import win32api
+from pathlib import Path
+from argparse import ArgumentParser
 
-from src.DataGenerator import DataGenerator
+from src.data_generation.DataGenerator import DataGenerator
 
 
-def main():
-    dataGenerator = DataGenerator("data_p_B", 5)
+if __name__ == "__main__":
+    parser = ArgumentParser(description="Click data generation script parameters")
+    parser.add_argument("--data_set_name", type=str, required=True)
+    args = parser.parse_args(sys.argv[1:])
+    dataGenerator = DataGenerator(Path("data_sets") / args.data_set_name, 5)
 
     prev_states = [1, 1]
     while True:
@@ -25,6 +31,3 @@ def main():
 
     dataGenerator.flush()
     dataGenerator.exit()
-
-if __name__ == "__main__":
-    main()

@@ -1,10 +1,13 @@
 # EyeTracker
-Tracks your eyes and predicts where you are looking on the screen.
+
+Predicts where you are looking at on your screen based on webcam view of your eyes.
 Comes with pretrained model and tools to generate your own data to finetune the pretrained network to your face.
 
-Trained using pytorch.
+Training happens Live, track the ball and see it slowly learn
 
-## Data generation
+## Usage
+
+### Data generation
 
 Generate your own data face data.
 
@@ -13,15 +16,16 @@ File | Description | Noise | Generation speed
 [ball_data_generator.py](ball_data_generator.py) | Records a data points periodically while moving a ball across the screen. We assume you are looking at the tip of the mouse. | Pretty noisy | Very fast
 [click_data_generator.py](click_data_generator.py) | Records a data point when you click your mouse, we assume you are looking at the tip of the mouse. | Almost no noise | Slow
 
+### Training/Running
 
-## Training/Running
 File | Description
 ---- | -----------
 [train.py](train.py) | Trains your model.
 [demo.py](demo.py) | Runs your trained model, draws prediction onscreen of where the model thinks you are looking.
 
 
-## Data visualisation/cleaning tools
+### Data visualisation/cleaning tools
+
 File_name | Description
 --------- | -----------
 [clean_meta_data.py](clean_meta_data.py) | Removes rows from meta data csv if the corresponding face is not found. Allows you to delete pictures without having to find in csv.

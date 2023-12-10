@@ -1,0 +1,4 @@
+PyQt5==5.15.10
+pandas==2.1.4
+opencv-python==4.8.1.78
+dlib==19.24.2

@@ -1,30 +1,30 @@
 import cv2
-import os
 import pandas as pd
 import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import Dataset
+from pathlib import Path
 
 from src.FaceDetector import Face
 
 
 class FaceDataset(Dataset):
-    def __init__(self, annotations_file, img_dir, device, testing=None):
-        self.annotations_file = annotations_file
-        self.meta_data_imgs = pd.read_csv(annotations_file)
+    def __init__(self, data_set_path: Path, device, testing=None):
+        self.meta_data_imgs = pd.read_csv(data_set_path / "meta_data.csv")
         if testing is not None:
             self.meta_data_imgs = self.meta_data_imgs[self.meta_data_imgs['testing'] == testing]
-        self.img_dir = img_dir
+        
+        self.img_path = data_set_path / "raw"
         self.device = device
 
         self.input_label_pairs = []
         for i in range(len(self.meta_data_imgs)):
             meta_data = self.meta_data_imgs.iloc[i]
             face = self.get_face(meta_data)
-            input = FaceDataset.face_to_tensor(face, self.device)
-            label = torch.tensor([meta_data['x_screen'], meta_data['y_screen']], device=self.device).float()
-            self.input_label_pairs.append((input, label))
+            X = FaceDataset.face_to_tensor(face, self.device)
+            y = torch.tensor([meta_data['x_screen'], meta_data['y_screen']], device=self.device).float()
+            self.input_label_pairs.append((X, y))
 
     def __len__(self):
         return len(self.meta_data_imgs)
@@ -33,10 +33,10 @@ class FaceDataset(Dataset):
         return self.input_label_pairs[idx]
 
     def get_face(self, meta_data) -> Face:
-        face_img = cv2.imread(os.path.join(self.img_dir, meta_data['face_file_name']))
+        face_img = cv2.imread(str((self.img_path / meta_data['face_file_name']).absolute()))
         tl_rx, tl_ry, rw, rh = meta_data['tl_rx'], meta_data['tl_ry'], meta_data['rw'], meta_data['rh']
-        features_rx = [meta_data['fx_' + str(i)] for i in range(68)] #todo
-        features_ry = [meta_data['fy_' + str(i)] for i in range(68)] #todo
+        features_rx = [meta_data[f'fx_{i}'] for i in range(68)]
+        features_ry = [meta_data[f'fy_{i}'] for i in range(68)]
         return Face(face_img, tl_rx, tl_ry, rw, rh, features_rx, features_ry)
 
     @staticmethod
@@ -48,8 +48,8 @@ class FaceDataset(Dataset):
     
     @staticmethod
     def face_to_tensor(face: Face, device: str) -> torch.Tensor:
-        left_eye_tensor = torch.from_numpy(np.asarray(FaceDataset.pre_process_img(face.get_eye_im(True))))
-        right_eye_tensor = torch.from_numpy(np.asarray(FaceDataset.pre_process_img(face.get_eye_im(False))))
+        left_eye_tensor = torch.from_numpy(np.asarray(FaceDataset.pre_process_img(face.get_eye_im("left"))))
+        right_eye_tensor = torch.from_numpy(np.asarray(FaceDataset.pre_process_img(face.get_eye_im("right"))))
 
         tensor_vals = []
         tensor_vals.append(left_eye_tensor.flatten()/torch.max(left_eye_tensor))
@@ -65,36 +65,27 @@ class FaceNeuralNetwork(nn.Module):
         super(FaceNeuralNetwork, self).__init__()
 
         self.meta_data_size = 4 + 68*2
-
         self.input_eye_size = 30*10
-        inter_eye_size = 150
-        out_eye_size = 50
-        
-        
-        inter_main_size = round((out_eye_size*2+self.meta_data_size+2)/2)
 
-        self.left_eye_stack = nn.Sequential(
-            nn.Linear(self.input_eye_size, inter_eye_size),
-            nn.ReLU(),
-            nn.Linear(inter_eye_size, inter_eye_size),
-            nn.ReLU(),
-            nn.Linear(inter_eye_size, out_eye_size)
-        )
+        out_eye_size = 30
 
-        self.right_eye_stack = nn.Sequential(
-            nn.Linear(self.input_eye_size, inter_eye_size),
-            nn.ReLU(),
-            nn.Linear(inter_eye_size, inter_eye_size),
-            nn.ReLU(),
-            nn.Linear(inter_eye_size, out_eye_size)
-        )
+        def gen_eye_stack():
+            return nn.Sequential(
+                nn.Linear(self.input_eye_size, 150),
+                nn.ReLU(),
+                nn.Linear(150, 150),
+                nn.ReLU(),
+                nn.Linear(150, out_eye_size)
+            )
+        self.left_eye_stack = gen_eye_stack()
+        self.right_eye_stack = gen_eye_stack()
 
         self.main_stack = nn.Sequential(
-            nn.Linear(out_eye_size*2+self.meta_data_size, inter_main_size),
+            nn.Linear(out_eye_size*2+self.meta_data_size, 100),
             nn.ReLU(),
-            nn.Linear(inter_main_size, inter_main_size),
+            nn.Linear(100, 100),
             nn.ReLU(),
-            nn.Linear(inter_main_size, 2)
+            nn.Linear(100, 2)
         )
 
     def forward(self, x):

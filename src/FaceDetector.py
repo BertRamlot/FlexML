@@ -14,8 +14,13 @@ class Face():
         self.rx = sum(self.features_rx[36:48])/12
         self.ry = sum(self.features_ry[36:48])/12
 
-    def get_eye_im(self, left: bool):
-        start_feature_index = 36 if left else 42
+    def get_eye_im(self, eye_type):
+        if eye_type == "left":
+            start_feature_index = 36
+        elif eye_type == "right":
+            start_feature_index = 42
+        else:
+            raise RuntimeError("Invalid eye_type:", eye_type)
         eye_features_rx = self.features_rx[start_feature_index:start_feature_index+6]
         eye_features_ry = self.features_ry[start_feature_index:start_feature_index+6]
         min_x, max_x = round(min(eye_features_rx)*self.im.shape[1]), round(max(eye_features_rx)*self.im.shape[1])

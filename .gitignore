@@ -1,6 +1,6 @@
-**/*.jpg
-**/*.csv
-**/*.pth
-**/*.zip
-**/*.7z
-**/__pycache__
+__pycache__/
+.vscode/
+
+# Ignore any data
+data_sets/*
+models/*

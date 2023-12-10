@@ -4,23 +4,22 @@ import ctypes
 import random
 import csv
 import cv2
+from pathlib import Path
 
 from src.FaceDetector import FaceDetector
 
 class DataGenerator():
-    def __init__(self, data_folder_name: str, buffer_size: int):
-        self.img_folder = "{}/raw/".format(data_folder_name)
-        self.all_csv_path = "{}/meta_data.csv".format(data_folder_name)
-        if not os.path.exists(self.img_folder):
-            os.makedirs(self.img_folder)
+    def __init__(self, data_set_path: Path, buffer_size: int):
+        self.img_folder = data_set_path / "raw"
+        self.all_csv_path = data_set_path / "meta_data.csv"
+        os.makedirs(self.img_folder, exist_ok=True)
 
         self.buffer_size = buffer_size
         self._buffer = []
 
-        user32 = ctypes.windll.user32
-        self.screen_width, self.screen_heigth = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
-        
-        print("Starting camera")
+        self.screen_dims = [ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)]
+
+        print("Starting camera ... (this can take a while, I don't know why)")
         self.cap = cv2.VideoCapture(0)
         self.face_detector = FaceDetector(self.cap)
     
@@ -38,31 +37,31 @@ class DataGenerator():
         return len(self._buffer)
 
     @staticmethod
-    def generate_filename(parent_dir: str, x: int, y: int):
-        path = None
+    def generate_filename(parent_path: Path, x: int, y: int):
+        file_name = None
         i = 0
-        while path is None or os.path.exists(parent_dir + path):
-            path = "{}_{}_{}.jpg".format(x, y, i)
+        while file_name is None or (parent_path / file_name).is_file():
+            file_name = f"{x}_{y}_{i}.jpg"
             i += 1
-        return path
+        return file_name
 
     def save_oldest_buffer_item(self) -> None:
         face, x, y = self._buffer[0]
         self._buffer = self._buffer[1:]
 
-        face_img_path = DataGenerator.generate_filename(self.img_folder, x, y)
+        face_img_name = DataGenerator.generate_filename(self.img_folder, x, y)
 
         # Saving raw images
-        cv2.imwrite(self.img_folder + face_img_path, face.im)
+        cv2.imwrite(str((self.img_folder / face_img_name).absolute()), face.im)
 
         # Saving meta data to csv
         prec = 6
         training_percentage = 0.9
         meta_data = [
             0 if random.random() < training_percentage else 1,
-            face_img_path,
-            round(x/self.screen_width,  prec),
-            round(y/self.screen_heigth, prec),
+            face_img_name,
+            round(x/self.screen_dims[0],  prec),
+            round(y/self.screen_dims[1], prec),
             round(face.tl_rx, prec),
             round(face.tl_ry, prec),
             round(face.rw, prec),
@@ -75,7 +74,7 @@ class DataGenerator():
         headers += ['fx_{}'.format(i) for i in range(len(face.features_rx))]
         headers += ['fy_{}'.format(i) for i in range(len(face.features_ry))]
         
-        file_exists = os.path.isfile(self.all_csv_path)
+        file_exists = self.all_csv_path.is_file()
         with open(self.all_csv_path, "a+", newline='',encoding="UTF8") as f:
             writer = csv.writer(f)
             if not file_exists:
