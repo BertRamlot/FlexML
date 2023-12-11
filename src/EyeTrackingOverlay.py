@@ -6,7 +6,7 @@ from PyQt5 import QtGui, QtWidgets, QtCore
 
 from src.FaceDetector import FaceDetector
 from src.FaceNeuralNetwork import FaceDataset, FaceNeuralNetwork
-from src.data_generation.DataGenerator import DataGenerator
+from src.DataGenerator import DataGenerator
 
 
 class EyeTrackingOverlay(QtWidgets.QMainWindow):
@@ -14,8 +14,9 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
         QtWidgets.QMainWindow.__init__(self, None, QtCore.Qt.WindowStaysOnTopHint)
 
         # Overlay setup
-        self.screen_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)])
-        self.setGeometry(0, 0, *self.screen_dims)
+        screen_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
+        self.max_screen_dim = screen_dims.max()
+        self.setGeometry(0, 0, *screen_dims)
         self.setStyleSheet("background:transparent")
         self.setWindowFlags(QtCore.Qt.FramelessWindowHint)
         self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
@@ -63,7 +64,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
         outer_ring_color = QtCore.Qt.yellow if capture else QtCore.Qt.blue
         inner_ring_color = QtCore.Qt.red if capture else QtCore.Qt.red
 
-        x, y = (position * self.screen_dims).round().astype(np.int32)
+        x, y = (position * self.max_screen_dim).round().astype(np.int32)
 
         r = 6
         pen = QtGui.QPen(outer_ring_color, 8, QtCore.Qt.SolidLine)
@@ -112,7 +113,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
                     pred_locations = []
                     faces_input = torch.stack([FaceDataset.face_to_tensor(face, self.device) for face in self.face_detector.last_faces])
                     predictions = self.model(faces_input).cpu().detach().numpy()
-                    pred_locations = (predictions * self.screen_dims).round().astype(np.int32)
+                    pred_locations = (predictions * self.max_screen_dim).round().astype(np.int32)
                     self.prediction_history = self.prediction_history[1:] + [pred_locations]
 
                 # Data generation

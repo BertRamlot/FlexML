@@ -17,7 +17,7 @@ from src.FaceNeuralNetwork import FaceNeuralNetwork, FaceDataset
 
 
 def test_epoch(test_loader, model, device, loss_functions):
-    losses = { name:0 for name in loss_functions}
+    losses = { name:0.0 for name in loss_functions}
     with torch.no_grad():
         for X, y in test_loader:
             X = X.to(device, non_blocking=True)
@@ -35,7 +35,7 @@ def test_epoch(test_loader, model, device, loss_functions):
 
 def train_one_epoch(train_loader, model, device, loss_functions, optimizer):
     if "criterion" not in loss_functions:
-        raise AttributeError("No criterion found")
+        raise KeyError("No criterion found")
     
     losses = { name:0.0 for name in loss_functions}
     for X, y in train_loader:
@@ -78,6 +78,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=1e-2)
     args = parser.parse_args(sys.argv[1:])
 
+
     model_path = Path("models") / args.model_name
     model_path.mkdir(parents=True, exist_ok=True)
     dataset_path = Path("datasets") / args.dataset
@@ -86,12 +87,9 @@ if __name__ == "__main__":
 
     tb_writer = SummaryWriter(model_path) if TENSORBOARD_FOUND else None
 
-    # loss_fn = torch.nn.L1Loss()
-    loss_fn = torch.nn.MSELoss()
-
     print("Loading training data set ... ", end="")
     train_dataset = FaceDataset(dataset_path, args.device, testing=False)
-    train_data_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+    train_data_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
     print(f"{len(train_dataset)} samples loaded")
 
     print("Loading testing data set ... ", end="")
@@ -119,6 +117,7 @@ if __name__ == "__main__":
     loss_functions = {
         "L1": torch.nn.L1Loss(),
         "L2": torch.nn.MSELoss(),
+        "euclid": lambda y1, y2: (y1-y2).pow(2).sum(-1).sqrt().mean(),
         "criterion": torch.nn.MSELoss()
     }
     max_epochs = 1e7 if args.max_epochs is None else args.max_epochs

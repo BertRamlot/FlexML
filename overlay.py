@@ -36,9 +36,13 @@ if __name__ == "__main__":
 
     if args.dataset:
         print("Dataset passed, generating data")
-        from src.data_generation.DataGenerator import BallDataGenerator
+        import numpy as np
+        import ctypes
+        from src.DataGenerator import BallDataGenerator
 
-        data_generator = BallDataGenerator(Path("datasets") / args.dataset, 200)
+        screen_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.float32)
+        screen_dims /= screen_dims.max()
+        data_generator = BallDataGenerator(Path("datasets") / args.dataset, 200, screen_dims)
     else:
         data_generator = None
 

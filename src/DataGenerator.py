@@ -4,6 +4,8 @@ import random
 import csv
 import numpy as np
 from pathlib import Path
+import ctypes
+import win32api
 
 from src.FaceDetector import FaceDetector
 
@@ -82,11 +84,12 @@ class DataGenerator():
         raise NotImplementedError()
 
 class BallDataGenerator(DataGenerator):
-    def __init__(self, dataset_path: Path, buffer_size: int):
+    def __init__(self, dataset_path: Path, buffer_size: int, screen_bounds):
         DataGenerator.__init__(self, dataset_path, buffer_size)
-        self.ball_pos = np.array([0.5, 0.5], dtype=np.float32)
-        self.ball_vel = np.array([0.15, 0.15], dtype=np.float32)
-        
+        self.ball_pos = screen_bounds/2.0
+        self.ball_vel = screen_bounds/7.0
+        self.screen_bounds = screen_bounds
+
         self.last_update_time = None
 
     # Override        
@@ -97,9 +100,9 @@ class BallDataGenerator(DataGenerator):
         if dt > 0.01:
             # Update ball position
             self.ball_pos += self.ball_vel*dt
-            out_of_bounds_mask = (self.ball_pos < 0) | (self.ball_pos > 1)
+            out_of_bounds_mask = (self.ball_pos < 0) | (self.ball_pos > self.screen_bounds)
             self.ball_vel *= np.where(out_of_bounds_mask, -1, 1)
-            self.ball_pos = np.clip(self.ball_pos, 0, 1)
+            self.ball_pos = np.clip(self.ball_pos, 0, self.screen_bounds)
             if out_of_bounds_mask.any():
                 rnd_angle = random.random()*np.pi/2
                 vel_mag = np.linalg.norm(self.ball_vel)
@@ -110,3 +113,25 @@ class BallDataGenerator(DataGenerator):
         time_since_start = time.time() - self.start_time
         time_since_register = time.time() - self.last_register_time
         return (self.ball_pos, time_since_register > 0.5 and time_since_start > 5)
+
+class ClickDataGenerator(DataGenerator):
+    def __init__(self, dataset_path: Path, buffer_size: int, buttons = [1, 2]):
+        DataGenerator.__init__(self, dataset_path, buffer_size)
+        self.button_states = { k : 1 for k in buttons}
+
+    def get_target_position(self):
+        max_screen_dim = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32).max()
+
+        new_button_states = { i:win32api.GetKeyState(i) for i in range(1, 3)}
+
+        button = -1 
+        for k in self.button_states:
+            if self.button_states[k] == new_button_states[k]:
+                continue
+            if new_button_states[k] < 0:
+                button = k
+                break
+        self.button_states = new_button_states
+        
+        screen_pos = np.array(win32api.GetCursorPos())
+        return (*screen_pos/max_screen_dim, button != -1)
