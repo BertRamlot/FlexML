@@ -66,7 +66,7 @@ def training_report(tb_writer, epoch, train_losses, test_losses):
         if tb_writer:
             tb_writer.add_scalars(f'{name}_loss', dict, epoch)
 
-    print(f"{epoch:6} | train_loss={train_losses['criterion']:.5f}, test_loss{test_losses['criterion']:.5f}")
+    print(f"{epoch:6} | train_loss={train_losses['criterion']:.5f}, test_loss={test_losses['criterion']:.5f}")
 
 
 if __name__ == "__main__":
@@ -99,7 +99,6 @@ if __name__ == "__main__":
 
     model = FaceNeuralNetwork().to(args.device)
     model.train()
-    # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
     last_epoch_file = max(model_path.glob("epoch_*.pth"), default=None)
@@ -115,8 +114,8 @@ if __name__ == "__main__":
 
     print("Starting training")
     loss_functions = {
-        "L1": torch.nn.L1Loss(),
-        "L2": torch.nn.MSELoss(),
+        "L1_x": lambda y1, y2: (y1[..., 0] - y2[..., 0]).abs().mean(),
+        "L1_y": lambda y1, y2: (y1[..., 1] - y2[..., 1]).abs().mean(),
         "euclid": lambda y1, y2: (y1-y2).pow(2).sum(-1).sqrt().mean(),
         "criterion": torch.nn.MSELoss()
     }
@@ -127,7 +126,7 @@ if __name__ == "__main__":
         
         training_report(tb_writer, epoch, train_losses, test_losses)
 
-        if epoch % 100 == 0 or epoch+1 == max_epochs:
+        if epoch % 50 == 0 or epoch+1 == max_epochs:
             torch.save(
                 {
                     'epoch': epoch,
