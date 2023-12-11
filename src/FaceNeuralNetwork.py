@@ -54,8 +54,8 @@ class FaceDataset(Dataset):
         tensor_vals.append(left_eye_tensor.flatten()/torch.mean(left_eye_tensor))
         tensor_vals.append(right_eye_tensor.flatten()/torch.mean(right_eye_tensor))
         tensor_vals.append(torch.Tensor([face.rx, face.ry, face.rw, face.rh]))
-        # tensor_vals.append(torch.Tensor(face.features_rx))
-        # tensor_vals.append(torch.Tensor(face.features_ry))
+        tensor_vals.append(torch.Tensor(face.features_rx))
+        tensor_vals.append(torch.Tensor(face.features_ry))
         return torch.cat(tensor_vals, dim=0).float().to(device=device)
 
 
@@ -70,11 +70,11 @@ class FaceNeuralNetwork(nn.Module):
 
         def gen_eye_stack():
             return nn.Sequential(
-                nn.Conv2d(1, 5, kernel_size=(5, 5), stride=(2, 2)),
+                nn.Conv2d(1, 5, kernel_size=(5, 5), stride=(3, 3)),
                 nn.ReLU(),
-                nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2)),
+                nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2)),
                 nn.Flatten(),
-                nn.Linear(8*5, out_eye_size),
+                nn.Linear(30, out_eye_size),
                 nn.ReLU(),
             )
         self.left_eye_stack = gen_eye_stack()
@@ -92,6 +92,9 @@ class FaceNeuralNetwork(nn.Module):
         left_eye_out = self.left_eye_stack(x[:,:self.input_eye_size].reshape(-1,1,10,40))
         right_eye_out = self.right_eye_stack(x[:,self.input_eye_size:2*self.input_eye_size].reshape(-1,1,10,40))
 
-        main_input = torch.cat((left_eye_out, right_eye_out, x[:,-self.meta_data_size:]), 1)
+        main_input = [left_eye_out, right_eye_out]
+        if self.meta_data_size > 0:
+            main_input.append(x[:,-self.meta_data_size:])
+        main_input = torch.cat(main_input, 1)
         output = self.main_stack(main_input)
         return torch.clamp(output, min=0.0, max=1.0)
