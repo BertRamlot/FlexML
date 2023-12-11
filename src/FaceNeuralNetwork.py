@@ -1,10 +1,10 @@
+from pathlib import Path
 import cv2
 import pandas as pd
 import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import Dataset
-from pathlib import Path
 
 from src.FaceDetector import Face
 
@@ -41,7 +41,7 @@ class FaceDataset(Dataset):
 
     @staticmethod
     def pre_process_img(img):
-        processed_img = cv2.resize(img, (30, 10), interpolation=cv2.INTER_CUBIC)
+        processed_img = cv2.resize(img, (40, 10), interpolation=cv2.INTER_CUBIC)
         processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2GRAY)
         processed_img = cv2.normalize(processed_img, None, 0, 255, cv2.NORM_MINMAX)
         return processed_img
@@ -50,7 +50,6 @@ class FaceDataset(Dataset):
     def face_to_tensor(face: Face, device: str) -> torch.Tensor:
         left_eye_tensor = torch.from_numpy(np.asarray(FaceDataset.pre_process_img(face.get_eye_im("left"))))
         right_eye_tensor = torch.from_numpy(np.asarray(FaceDataset.pre_process_img(face.get_eye_im("right"))))
-
         tensor_vals = []
         tensor_vals.append(left_eye_tensor.flatten()/torch.max(left_eye_tensor))
         tensor_vals.append(right_eye_tensor.flatten()/torch.max(right_eye_tensor))
@@ -65,32 +64,34 @@ class FaceNeuralNetwork(nn.Module):
         super(FaceNeuralNetwork, self).__init__()
 
         self.meta_data_size = 4 + 68*2
-        self.input_eye_size = 30*10
+        self.input_eye_size = 40*10
 
-        out_eye_size = 30
+        out_eye_size = 5
 
         def gen_eye_stack():
             return nn.Sequential(
-                nn.Linear(self.input_eye_size, 150),
+                nn.Conv2d(1, 5, kernel_size=(5, 5), stride=(2, 2)),
                 nn.ReLU(),
-                nn.Linear(150, 150),
+                nn.MaxPool2d(kernel_size=(3, 3), stride=(2, 2)),
+                nn.Flatten(),
+                nn.Linear(40, 10),
                 nn.ReLU(),
-                nn.Linear(150, out_eye_size)
+                nn.Linear(10, out_eye_size)
             )
         self.left_eye_stack = gen_eye_stack()
         self.right_eye_stack = gen_eye_stack()
 
         self.main_stack = nn.Sequential(
-            nn.Linear(out_eye_size*2+self.meta_data_size, 100),
+            nn.Linear(out_eye_size*2+self.meta_data_size, 20),
             nn.ReLU(),
-            nn.Linear(100, 100),
+            nn.Linear(20, 15),
             nn.ReLU(),
-            nn.Linear(100, 2)
+            nn.Linear(15, 2)
         )
 
     def forward(self, x):
-        left_eye_out = self.left_eye_stack(x[:,:self.input_eye_size])
-        right_eye_out = self.right_eye_stack(x[:,self.input_eye_size:2*self.input_eye_size])
+        left_eye_out = self.left_eye_stack(x[:,:self.input_eye_size].reshape(-1,1,10,40))
+        right_eye_out = self.right_eye_stack(x[:,self.input_eye_size:2*self.input_eye_size].reshape(-1,1,10,40))
 
         main_input = torch.cat((left_eye_out, right_eye_out, x[:,-self.meta_data_size:]), 1)
         return self.main_stack(main_input)
