@@ -19,7 +19,7 @@ from src.FaceNeuralNetwork import FaceNeuralNetwork, FaceDataset
 def test_epoch(test_loader, model, criterion, device):
     epoch_loss = 0
     with torch.no_grad():
-        for X, y in test_dataloader:
+        for X, y in test_loader:
             X = X.to(device, non_blocking=True)
             y = y.to(device, non_blocking=True)
 
@@ -43,12 +43,12 @@ def train_one_epoch(train_loader, model, criterion, optimizer, device):
         loss.backward()
         optimizer.step()
     
-    return epoch_loss / len(train_dataloader)
+    return epoch_loss / len(train_data_loader)
 
 def training_report(tb_writer, epoch, train_loss, test_loss):
     if tb_writer:
-        tb_writer.add_scalar('train/l2_loss', train_loss, epoch)
-        tb_writer.add_scalar('test/l2_loss', test_loss, epoch)
+        tb_writer.add_scalar('loss/train_l2', train_loss, epoch)
+        tb_writer.add_scalar('loss/test_l2', test_loss, epoch)
 
     print(f"{epoch} | train_loss={train_loss}, test_loss={test_loss}")
 
@@ -72,16 +72,20 @@ if __name__ == "__main__":
     # loss_fn = torch.nn.L1Loss()
     loss_fn = torch.nn.MSELoss()
 
-    print("Loading training data set")
+    print("Loading training data set ... ", end="")
     train_data_set = FaceDataset(data_set_path, args.device, testing=False)
-    train_dataloader = DataLoader(train_data_set, batch_size=8, shuffle=True)
+    train_data_loader = DataLoader(train_data_set, batch_size=8, shuffle=True)
+    print(f"{len(train_data_set)} samples loaded")
 
-    print("Loading testing data set")
+    print("Loading testing data set ... ", end="")
     test_data_set = FaceDataset(data_set_path, args.device, testing=True)
-    test_dataloader = DataLoader(test_data_set, batch_size=1, shuffle=True)
+    test_data_loader = DataLoader(test_data_set, batch_size=1)
+    print(f"{len(test_data_set)} samples loaded")
 
     model = FaceNeuralNetwork().to(args.device)
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
+    model.train()
+    # optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, eps=1e-15)
 
     last_epoch_file = max(model_path.glob("epoch_*.pth"), default=None)
     if last_epoch_file is None:
@@ -101,22 +105,22 @@ if __name__ == "__main__":
 
     max_epochs = 1e7 if args.max_epochs is None else args.max_epochs
     while epoch < max_epochs:
-        model.train()
-        train_loss = train_one_epoch(train_dataloader, model, criterion, optimizer, args.device)
+        train_loss = train_one_epoch(train_data_loader, model, criterion, optimizer, args.device)
 
-        model.eval()
-        test_loss = test_epoch(test_dataloader, model, criterion, args.device)
+        # model.eval()
+        test_loss = test_epoch(test_data_loader, model, criterion, args.device)
         
         training_report(tb_writer, epoch, train_loss, test_loss)
 
-        torch.save(
-            {
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-            },
-            model_path / f"epoch_{epoch:0>6}.pth"
-        )
+        if epoch % 100 == 0:
+            torch.save(
+                {
+                    'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                },
+                model_path / f"epoch_{epoch:0>6}.pth"
+            )
         
         epoch += 1
     
