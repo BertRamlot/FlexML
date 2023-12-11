@@ -1,6 +1,6 @@
 __pycache__/
 .vscode/
 
-# Ignore any data
-data_sets/*
+# Ignore any data/model
+datasets/*
 models/*

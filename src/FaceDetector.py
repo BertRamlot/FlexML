@@ -16,20 +16,20 @@ class Face():
 
     def get_eye_im(self, eye_type):
         if eye_type == "left":
-            start_feature_index = 36
+            idx = 36
         elif eye_type == "right":
-            start_feature_index = 42
+            idx = 42
         else:
             raise RuntimeError("Invalid eye_type:", eye_type)
-        eye_features_rx = self.features_rx[start_feature_index:start_feature_index+6]
-        eye_features_ry = self.features_ry[start_feature_index:start_feature_index+6]
+        eye_features_rx = self.features_rx[idx:idx+6]
+        eye_features_ry = self.features_ry[idx:idx+6]
         min_x, max_x = round(min(eye_features_rx)*self.im.shape[1]), round(max(eye_features_rx)*self.im.shape[1])
         min_y, max_y = round(min(eye_features_ry)*self.im.shape[0]), round(max(eye_features_ry)*self.im.shape[0])
         return self.im[min_y:max_y, min_x:max_x]
 
 
 class FaceDetector():
-    def __init__(self, cap):
+    def __init__(self, cap: cv2.VideoCapture):
         self.cap = cap
         print("Loading face/feature model")
         self.face_detector = dlib.get_frontal_face_detector()
@@ -40,7 +40,7 @@ class FaceDetector():
         self.last_img = None
         self.last_faces = []
 
-    def valid_faces_found(self) -> bool:
+    def faces_found(self) -> bool:
         return len(self.last_faces) > 0
 
     def update(self):
@@ -69,7 +69,3 @@ class FaceDetector():
             faces.append(Face(face_im, tl_rx, tl_ry, rw, rh, features_rx, features_ry))
 
         self.last_faces = faces
-
-        # self.last_img = self.last_img[:, round(0.25*self.last_img.shape[1]):round(0.75*self.last_img.shape[1])]
-        # t0 = time.time()
-        # print("c: {} s".format(time.time()-t0))

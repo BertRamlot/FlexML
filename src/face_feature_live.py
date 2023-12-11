@@ -4,7 +4,7 @@ from src.FaceDetector import FaceDetector
 
 
 def main():
-    print("Starting camera")
+    print("Starting camera ... (this can take a while, I don't know why)")
     cap = cv2.VideoCapture(0)
     face_detector = FaceDetector(cap)
 
@@ -12,6 +12,9 @@ def main():
 
     while True:
         face_detector.update()
+
+        if not face_detector.valid_faces_found():
+            continue
         
         annotated_img = face_detector.last_img
         
@@ -30,9 +33,8 @@ def main():
                 annotated_img = cv2.putText(annotated_img, str(i), (x-10,y+5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 255)
             
             annotated_img = cv2.circle(annotated_img, (fx, fy), 3, (0,0,255), thickness=-1)
-
+            # Bounding box
             annotated_img = cv2.rectangle(annotated_img, (tl_x, tl_y), (tl_x+fw, tl_y+fh), face_colors[fi % len(face_colors)], 3)
-
 
         cv2.imshow("webcam_annotated", annotated_img)
         
