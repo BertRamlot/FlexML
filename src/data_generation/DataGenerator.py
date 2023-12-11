@@ -10,9 +10,9 @@ from src.FaceDetector import FaceDetector
 
 class DataGenerator():
     def __init__(self, data_set_path: Path, buffer_size: int):
-        self.img_folder = data_set_path / "raw"
-        self.all_csv_path = data_set_path / "meta_data.csv"
-        os.makedirs(self.img_folder, exist_ok=True)
+        self.images_dir_path = data_set_path / "raw"
+        self.meta_data_path = data_set_path / "meta_data.csv"
+        os.makedirs(self.images_dir_path, exist_ok=True)
 
         self.buffer_size = buffer_size
         self._buffer = []
@@ -49,10 +49,10 @@ class DataGenerator():
         face, x, y = self._buffer[0]
         self._buffer = self._buffer[1:]
 
-        face_img_name = DataGenerator.generate_filename(self.img_folder, x, y)
+        face_img_name = DataGenerator.generate_filename(self.images_dir_path, x, y)
 
         # Saving raw images
-        cv2.imwrite(str((self.img_folder / face_img_name).absolute()), face.im)
+        cv2.imwrite(str((self.images_dir_path / face_img_name).absolute()), face.im)
 
         # Saving meta data to csv
         prec = 6
@@ -74,8 +74,8 @@ class DataGenerator():
         headers += ['fx_{}'.format(i) for i in range(len(face.features_rx))]
         headers += ['fy_{}'.format(i) for i in range(len(face.features_ry))]
         
-        file_exists = self.all_csv_path.is_file()
-        with open(self.all_csv_path, "a+", newline='',encoding="UTF8") as f:
+        file_exists = self.meta_data_path.is_file()
+        with open(self.meta_data_path, "a+", newline='',encoding="UTF8") as f:
             writer = csv.writer(f)
             if not file_exists:
                 writer.writerow(headers)

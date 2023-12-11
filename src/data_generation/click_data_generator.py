@@ -1,10 +1,11 @@
 import sys
 import time
 import ctypes
-import numpy as np
-import win32api
 from pathlib import Path
 from argparse import ArgumentParser
+import numpy as np
+import win32api
+
 
 from src.data_generation.DataGenerator import DataGenerator
 

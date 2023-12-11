@@ -1,12 +1,12 @@
 import sys
 import random
 import ctypes
-import numpy as np
 import time
 import math
-from PyQt5 import QtGui, QtWidgets, QtCore
 from argparse import ArgumentParser
 from pathlib import Path
+import numpy as np
+from PyQt5 import QtGui, QtWidgets, QtCore
 
 from src.data_generation.DataGenerator import DataGenerator
 
@@ -24,7 +24,7 @@ class BallTrackingOverlay(QtWidgets.QMainWindow):
         self.dataGenerator = dataGenerator
 
         self.ball_pos = np.array([0.5, 0.5], dtype=np.float32)
-        self.ball_vel = np.array([0.1, 0.1], dtype=np.float32)
+        self.ball_vel = np.array([0.15, 0.15], dtype=np.float32)
         
         self.last_update_time = None
         self.start_time = None
@@ -52,7 +52,7 @@ class BallTrackingOverlay(QtWidgets.QMainWindow):
 
         elapsed_time = time.time() - self.start_time
         time_since_capture = time.time() - self.last_capture_time
-        if elapsed_time > 5 and time_since_capture > 1: 
+        if elapsed_time > 5 and time_since_capture > 0.3: 
             self.last_capture_time = time.time()
             succes = self.dataGenerator.register_eye_position(self.ball_pos[0], self.ball_pos[1])
             print("\rEye status: {}".format("OK  " if succes else "ERR  "), end='')

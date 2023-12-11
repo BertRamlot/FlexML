@@ -1,11 +1,11 @@
 import ctypes
 import sys
+from pathlib import Path
+from argparse import ArgumentParser
 from PyQt5 import QtGui, QtWidgets, QtCore
 import cv2
 import torch
 import numpy as np
-from pathlib import Path
-from argparse import ArgumentParser
 
 from src.FaceNeuralNetwork import FaceDataset, FaceNeuralNetwork
 from src.FaceDetector import FaceDetector

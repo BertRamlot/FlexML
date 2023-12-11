@@ -27,8 +27,6 @@ class Face():
         min_y, max_y = round(min(eye_features_ry)*self.im.shape[0]), round(max(eye_features_ry)*self.im.shape[0])
         return self.im[min_y:max_y, min_x:max_x]
 
-    def __lt__(self, other_face) -> bool:
-        return self.rx < other_face.rx
 
 class FaceDetector():
     def __init__(self, cap):
@@ -47,11 +45,11 @@ class FaceDetector():
 
     def update(self):
         _, self.last_img = self.cap.read()
-        gray = cv2.cvtColor(self.last_img, cv2.COLOR_BGR2GRAY)
+        gray_img = cv2.cvtColor(self.last_img, cv2.COLOR_BGR2GRAY)
 
         faces = []
-        for approx_face_box in self.face_detector(gray):
-            landmarks = self.face_feature_predictor(gray, box=approx_face_box)
+        for approx_face_box in self.face_detector(gray_img):
+            landmarks = self.face_feature_predictor(gray_img, box=approx_face_box)
             approx_x_parts = [p.x for p in landmarks.parts()]
             approx_y_parts = [p.y for p in landmarks.parts()]
             fx, fy = min(approx_x_parts), min(approx_y_parts)

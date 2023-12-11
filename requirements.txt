@@ -2,3 +2,6 @@ PyQt5==5.15.10
 pandas==2.1.4
 opencv-python==4.8.1.78
 dlib==19.24.2
+torch==2.1.1
+numpy==1.26.2
+pywin32==306; platform_system=="Windows"
