@@ -41,7 +41,7 @@ class DataGenerator():
         file_name = None
         i = 0
         while file_name is None or (parent_path / file_name).is_file():
-            file_name = f"{x}_{y}_{i}.jpg"
+            file_name = f"{x:.5f}_{y:.5f}_{i}.jpg"
             i += 1
         return file_name
 
@@ -60,8 +60,8 @@ class DataGenerator():
         meta_data = [
             0 if random.random() < training_percentage else 1,
             face_img_name,
-            round(x/self.screen_dims[0],  prec),
-            round(y/self.screen_dims[1], prec),
+            round(x, prec),
+            round(y, prec),
             round(face.tl_rx, prec),
             round(face.tl_ry, prec),
             round(face.rw, prec),
