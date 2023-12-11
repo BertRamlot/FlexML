@@ -34,14 +34,13 @@ The model is robust against the following phenomena, given that these were adequ
 ### Creating a dataset
 
 ```bash
-# Only data gathering
-python -m src.overlay --dataset my_dataset
+python overlay.py --dataset my_dataset
 ```
 
 ### Training a model
 
 ```bash
-python -m src.train --dataset my_dataset --model my_model
+python train.py --dataset my_dataset --model my_model
 ```
 
 Optional arguments ([train.py](./src/train.py)):
@@ -50,15 +49,16 @@ Optional arguments ([train.py](./src/train.py)):
 - `max_epochs`: epoch at which to stop training
 - `device`: torch device
 
-
 ### Testing a model
+
 Note: Inference uses the same python file as the data generation. In fact, both can be done at the same time!
+
 ```bash
 # Only inference
-python -m src.overlay --model my_model
+python overlay.py --model my_model
 
 # Inference + data gathering
-python -m src.overlay --model my_model --dataset my_dataset 
+python overlay.py --model my_model --dataset my_dataset 
 ```
 
 Optional inference arguments ([overlay.py](./src/overlay.py)):
