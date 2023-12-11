@@ -74,7 +74,7 @@ if __name__ == "__main__":
 
     print("Loading training data set ... ", end="")
     train_data_set = FaceDataset(data_set_path, args.device, testing=False)
-    train_data_loader = DataLoader(train_data_set, batch_size=8, shuffle=True)
+    train_data_loader = DataLoader(train_data_set, batch_size=32, shuffle=True)
     print(f"{len(train_data_set)} samples loaded")
 
     print("Loading testing data set ... ", end="")
