@@ -1,47 +1,14 @@
 import sys
 from pathlib import Path
 from argparse import ArgumentParser
-import torch
 from PyQt5 import QtWidgets
-from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
-import numpy as np
-try:
-    from torch.utils.tensorboard import SummaryWriter
-    TENSORBOARD_FOUND = True
-    print("Tensorboard found")
-except ImportError:
-    TENSORBOARD_FOUND = False
-    print("Tensorboard not found")
 
-from src.SourceThread import SimpleBallSourceThread, WebcamSourceThread
+from src.SourceThread import SimpleBallSourceThread, WebcamSourceThread, DatasetSource
 from src.ModelThread import ModelThread
-from src.DatasetGenerator import SampleConvertor
-from src.Sample import Sample
+from src.Sample import SampleGenerator
 
-from src.face_based.FaceNetwork import FaceDataset
 from src.face_based.FaceSample import FaceSampleConvertor
 
-class SampleGenerator(QObject):
-    new_sample = pyqtSignal(Sample)
-
-    def __init__(self, dataset_path: Path, sample_convertor: SampleConvertor):
-        self.dataset_path = dataset_path
-        self.sample_convertor = sample_convertor
-        self.last_img = None
-        self.last_label = None
-
-    @pyqtSlot(np.ndarray)
-    def set_last_label(self, label: np.ndarray):
-        self.last_label = label
-
-    @pyqtSlot(np.ndarray)
-    def set_last_img(self, img: np.ndarray):
-        self.last_img = img
-        sample = Sample(None, self.last_img, None, self.last_label)
-        converted_samples = self.sample_convertor.convert_sample(sample)
-        for sample in converted_samples:
-            sample.save(self.dataset_path)
-            self.new_sample.emit(sample)
 
 def get_source_worker(uid: str|None):
     if uid is None:
@@ -62,7 +29,7 @@ def get_network(uid: str):
 if __name__ == "__main__":
     parser = ArgumentParser(description="Overlay script parameters")
     parser.add_argument("--dataset", type=str, default=None)
-    parser.add_argument("--load_datasets", type=str, nargs="+", default=None)
+    parser.add_argument("--load_datasets", type=str, nargs="*", default=None)
     parser.add_argument("--save_dataset", type=str, default=None)
     parser.add_argument("--gt_source", type=str, default="simple-ball", choices=["simple-ball"])
     parser.add_argument("--img_source", type=str, default="webcam", choices=["webcam"])
@@ -83,12 +50,18 @@ if __name__ == "__main__":
     window = EyeTrackingOverlay()
     window.showFullScreen()
 
+    # Create dataset loaders
+    if args.load_datasets:
+        sample_sources = [DatasetSource(load_dataset_path) for load_dataset_path in args.load_datasets]
+    else:
+        sample_sources = []
+
+
     # Create model thread
     if args.model and args.dataset:
         model_thread = ModelThread(
             Path("models") / args.model,
             args.model_type,
-            args.load_datasets,
             args.device,
             args.live_train
         )
@@ -117,6 +90,13 @@ if __name__ == "__main__":
     if model_thread:
         model_thread.start()
 
+    # Start and finish disk sources
+    for sample_source in sample_sources:
+        sample_source.start()
+    for sample_source in sample_sources:
+        sample_source.wait()
+
+    # Start live sources
     if gt_src_thread:
         gt_src_thread.start()
     if img_src_thread:

@@ -4,7 +4,12 @@ import numpy as np
 import ctypes
 import cv2
 import win32api
-from PyQt5.QtCore import QThread, pyqtSignal
+import pandas as pd
+from pathlib import Path
+from PyQt5.QtCore import QObject, QThread, pyqtSignal
+
+from src.Sample import Sample
+
 
 class SourceThread(QThread):
     new_item = pyqtSignal(np.ndarray)
@@ -14,14 +19,18 @@ class SourceThread(QThread):
         self.timeout = timeout
 
     def run(self):
-        while True:
+        while self.is_done():
             success, item = self.get()
             if success:
                 self.new_item.emit(item)
-            time.sleep(self.timeout)
+            if self.timeout:
+                time.sleep(self.timeout)
 
     def get(self) -> tuple[bool, object]:
         raise NotImplementedError()
+    
+    def is_done(self) -> bool:
+        return False
 
 class WebcamSourceThread(SourceThread):
     def __init__(self, timeout: int, index: int = 0):
@@ -32,7 +41,7 @@ class WebcamSourceThread(SourceThread):
     def __del__(self):
         self.cap.release()
 
-    def get_img(self) -> tuple[bool, np.ndarray]:
+    def get(self) -> tuple[bool, np.ndarray]:
         return self.cap.read()
 
 class SimpleBallSourceThread(SourceThread):
@@ -46,7 +55,7 @@ class SimpleBallSourceThread(SourceThread):
         self.ball_pos = self.screen_bounds/2.0
         self.ball_vel = self.screen_bounds/7.0
 
-    def get_label(self) -> tuple[bool, tuple[float, float]]:
+    def get(self) -> tuple[bool, tuple[float, float]]:
         now_time = time.time()
 
         if self.ball_time is None:
@@ -78,7 +87,7 @@ class ClickListenerSourceThread(SourceThread):
         super(ClickListenerSourceThread, self).__init__(timeout)
         self.button_states = { k : 1 for k in buttons}
 
-    def get_label(self) -> tuple[bool, tuple[float, float]]:
+    def get(self) -> tuple[bool, tuple[float, float]]:
         max_screen_dim = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32).max()
 
         new_button_states = { i:win32api.GetKeyState(i) for i in range(1, 3)}
@@ -94,3 +103,20 @@ class ClickListenerSourceThread(SourceThread):
         
         screen_pos = np.array(win32api.GetCursorPos())
         return (button != -1, *screen_pos/max_screen_dim)
+
+class DatasetSource(SourceThread):
+    def __init__(self, dataset_path: Path):
+        super(DatasetSource, self).__init__(0.0)
+        self.metadata_imgs = pd.read_csv(dataset_path / "metadata.csv")
+        self.img_path = dataset_path / "raw"
+        self.curr_index = 0
+
+    def get(self) -> tuple[bool, Sample]:
+        if self.curr_index >= len(self.metadata_imgs):
+            return (False, None)
+        sample = Sample.from_metadata(self.metadata_imgs[self.curr_index])
+        self.curr_index += 1
+        return (True, sample)
+
+    def is_done(self) -> bool:
+        return self.curr_index >= len(self.metadata_imgs)

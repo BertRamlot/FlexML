@@ -2,7 +2,8 @@
 from pathlib import Path
 from PyQt5.QtCore import QThread, pyqtSignal, QMutex, pyqtSlot
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
+
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -10,8 +11,6 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
     print("Tensorboard not found")
-
-from src.Sample import Sample
 
 def test_epoch(test_loader, model, device, loss_functions):
     losses = { name:0.0 for name in loss_functions}
@@ -66,12 +65,26 @@ def training_report(tb_writer, epoch, train_losses, val_losses, test_losses):
     print(f"{epoch:6} | train_loss={train_losses['criterion']:.5f}, val_loss={test_losses['criterion']:.5f}")
 
 
+class DynamicDataset(Dataset):
+    def __init__(self, type: str|None = None):
+        self.type = type
+        self.input_label_pairs = []
+
+    def __len__(self):
+        return len(self.input_label_pairs)
+
+    def __getitem__(self, idx):
+        return self.input_label_pairs[idx]
+    
+    def add_pair(self, X, y):
+        self.input_label_pairs.append((X, y))
+
 class ModelThread(QThread):
     """Manages the pytorch model."""
 
     predicted_samples = pyqtSignal(tuple)
 
-    def __init__(self, model_path: str, model_type: str, dataset_paths: list[Path], device: str, training: bool):
+    def __init__(self, model_path: str, model_type: str, device: str, training: bool):
         super(ModelThread, self).__init__()
 
         self.device = device
@@ -97,36 +110,38 @@ class ModelThread(QThread):
 
         model.train(training)
 
-        self.new_samples = []
-        self.new_samples_mutex = QMutex()
+        self.inference_queue_mutex = QMutex()
+        self.inference_queue = []
         self.model = model
 
         self.tb_writer = SummaryWriter(model_path / "logs") if TENSORBOARD_FOUND else None
 
         print("Loading datasets ... ", end="")
-        self.train_dataset = FaceDataset(dataset_paths, self.device, type="train")
-        self.val_dataset = FaceDataset(dataset_paths, self.device, type="val")
-        self.test_dataset = FaceDataset(dataset_paths, self.device, type="test")
+        self.train_dataset = DynamicDataset(self.device, type="train")
+        self.val_dataset = DynamicDataset(self.device, type="val")
+        self.test_dataset = DynamicDataset(self.device, type="test")
         print(f"{len(self.train_dataset)}/{len(self.val_dataset)}/{len(self.test_dataset)} train/val/test samples loaded")
 
         self.train_data_loader = DataLoader(self.train_dataset, batch_size=32, shuffle=True)
         self.val_data_loader = DataLoader(self.val_dataset, batch_size=1)
         self.test_data_loader = DataLoader(self.test_dataset, batch_size=1)
 
-    @pyqtSlot(Sample)
-    def request_inference(self, sample: Sample):
-        self.new_samples.append(sample)
+    @pyqtSlot(torch.tensor)
+    def request_inference(self, X: torch.tensor):
+        self.inference_queue_mutex.lock()
+        self.inference_queue.append(X)
+        self.inference_queue_mutex.un_lock()
 
-    @pyqtSlot(Sample)
-    def add_sample(self, sample: Sample):
+    @pyqtSlot(tuple)
+    def add_pair(self, pair: tuple):
         # TODO:
         # self.new_samples_mutex.lock()
         if sample.type == "train":
-            self.train_dataset.add_sample(sample)
+            self.train_dataset.add_pair(sample)
         elif sample.type == "val":
-            self.val_dataset.add_sample(sample)
+            self.val_dataset.add_pair(sample)
         elif sample.type == "test":
-            self.test_dataset.add_sample(sample)
+            self.test_dataset.add_pair(sample)
         else:
             raise ValueError("Unexpected type:", sample.type)
         # self.new_samples_mutex.unlock()
@@ -162,10 +177,10 @@ class ModelThread(QThread):
 
             # Do inference on the new samples
             self.new_samples_mutex.lock()
-            if self.new_samples:
+            if self.inference_queue:
                 with torch.no_grad():
-                    faces_input = torch.stack([FaceDataset.face_sample_to_tensor(sample, self.device) for sample in self.new_samples])
-                    predictions = self.model(faces_input).cpu().detach().numpy()
-                    self.predicted_samples.emit(zip(self.new_samples, predictions))
-                self.new_samples = []
+                    all_input = torch.stack(self.inference_queue)
+                    predictions = self.model(all_input).cpu().detach().numpy()
+                    self.predicted_samples.emit(zip(self.inference_queue, predictions))
+                self.inference_queue = []
             self.new_samples_mutex.unlock()

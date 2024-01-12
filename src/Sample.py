@@ -3,7 +3,8 @@ import cv2
 import numpy as np
 from pathlib import Path
 import csv
-
+import torch
+from PyQt5.QtCore import QObject, pyqtSignal, pyqtSlot
 
 class Sample():
     def __init__(self, img_path: str, img: np.ndarray, type: str, gt_pos: tuple[float, float]):
@@ -64,3 +65,49 @@ class Sample():
     
     def get_metadata_headers(self) -> list[str]:
         return ["img_path", "type", "x", "y"] + self.get_extra_metadata_headers()
+
+# SampleMuxer?
+class SampleGenerator(QObject):
+    new_sample = pyqtSignal(Sample)
+
+    def __init__(self, dataset_path: Path):
+        self.dataset_path = dataset_path
+        self.last_img = None
+        self.last_label = None
+
+    @pyqtSlot(np.ndarray)
+    def set_last_label(self, label: np.ndarray, publish: bool = False):
+        self.last_label = label
+        if publish:
+            self.publish_sample()
+
+    @pyqtSlot(np.ndarray)
+    def set_last_img(self, img: np.ndarray, publish: bool = True):
+        self.last_img = img
+        if publish:
+            self.publish_sample()
+
+    def publish_sample(self):
+        sample = Sample(None, self.last_img, None, self.last_label)
+        self.new_sample.emit(sample)
+
+class SampleConvertor(QObject):
+    def convert_sample(self, sample: Sample) -> list[Sample]:
+        raise NotImplementedError()
+
+class SampleToTensor(QObject):
+    output_tensor = pyqtSignal(torch.tensor)
+
+    def __init__(self):
+        pass
+
+    def to_tensor(self, sample: Sample, device: str) -> torch.tensor:
+        raise NotImplementedError()
+
+class SampleDrain(QObject):
+    pass
+
+class DiskSampleDrain(QObject):
+    
+    def consume(self, sample: Sample):
+        sample.save(self.dataset_path)

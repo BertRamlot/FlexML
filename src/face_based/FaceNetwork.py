@@ -1,41 +1,15 @@
-from pathlib import Path
 import cv2
-import pandas as pd
 import numpy as np
 import torch
 from torch import nn
-from torch.utils.data import Dataset
 
 from src.face_based.FaceSample import FaceSample
+from src.Sample import SampleToTensor
 
 
-class FaceDataset(Dataset):
-    def __init__(self, dataset_path: Path, device, type=None):
-        self.metadata_imgs = pd.read_csv(dataset_path / "metadata.csv")
-        if type is not None:
-            self.metadata_imgs = self.metadata_imgs[self.metadata_imgs['type'] == type]
-        
-        self.img_path = dataset_path / "raw"
-        self.device = device
+class FaceSampleToTensor(SampleToTensor):
 
-        self.input_label_pairs = []
-        for _, row in self.metadata_imgs.iterrows():
-            face_sample = FaceSample.from_metadata(row.to_list())
-            self.add_sample(face_sample)
-
-    def __len__(self):
-        return len(self.input_label_pairs)
-
-    def __getitem__(self, idx):
-        return self.input_label_pairs[idx]
-    
-    def add_sample(self, face_sample: FaceSample):
-        X = FaceDataset.face_sample_to_tensor(face_sample, self.device)
-        y = torch.tensor(face_sample.pos_label, device=self.device).float()
-        self.input_label_pairs.append((X, y))
-
-    @staticmethod
-    def face_sample_to_tensor(sample: FaceSample, device: str) -> torch.Tensor:
+    def to_tensor(self, sample: FaceSample, device: str) -> torch.tensor:
         def pre_process_img(img):
             processed_img = cv2.resize(img, (40, 10), interpolation=cv2.INTER_CUBIC)
             processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2GRAY)

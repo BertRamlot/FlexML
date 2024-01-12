@@ -76,7 +76,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
             qp.drawEllipse(x-r, y-r, 2*r, 2*r)
             qp.drawText(x-50, y, "No valid face(s) found")
 
-        # Inference
+        # Inference circles
         r = 30
         for i, pred_loc in enumerate(self.inference_history[-1]):
             x, y = (pred_loc * self.window_dims.max()).round().astype(np.int32)

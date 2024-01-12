@@ -2,8 +2,7 @@ import numpy as np
 import cv2
 import dlib
 
-from src.DatasetGenerator import SampleConvertor
-from src.Sample import Sample
+from src.Sample import Sample, SampleConvertor
 
 
 class FaceSample(Sample):
