@@ -1,6 +1,6 @@
 import cv2
 
-from src.FaceDetector import FaceDetector
+from src.face_based.FaceSample import FaceDetector
 
 
 def main():
@@ -19,27 +19,23 @@ def main():
         annotated_img = face_detector.last_img
         
         for fi, face in enumerate(face_detector.last_faces):
-            tl_x = round(face.tl_rx * face_detector.video_width)
-            tl_y = round(face.tl_ry * face_detector.video_height)
-            fw = face.im.shape[1]
-            fh = face.im.shape[0]
-            fx = round(tl_x + face.rx * fw)
-            fy = round(tl_y + face.ry * fh)
+            tl_xy = round(face.tl_rxy * face_detector.video_dims)
+            fwh = face.im.shape[:2]
+            fxy = round(tl_xy + face.rxy * fwh)
 
             for i in range(len(face.features_rx)):
-                x = round(tl_x + face.features_rx[i] * fw)
-                y = round(tl_y + face.features_ry[i] * fh)
+                x, y = round(tl_xy + face.features_rxy[i] * fwh)
                 annotated_img = cv2.circle(annotated_img, (x,y), 3, (0,255,0), thickness=-1)
                 annotated_img = cv2.putText(annotated_img, str(i), (x-10,y+5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, 255)
             
-            annotated_img = cv2.circle(annotated_img, (fx, fy), 3, (0,0,255), thickness=-1)
+            annotated_img = cv2.circle(annotated_img, fxy, 3, (0,0,255), thickness=-1)
             # Bounding box
-            annotated_img = cv2.rectangle(annotated_img, (tl_x, tl_y), (tl_x+fw, tl_y+fh), face_colors[fi % len(face_colors)], 3)
+            annotated_img = cv2.rectangle(annotated_img, tl_xy, tl_xy + fwh, face_colors[fi % len(face_colors)], 3)
 
         cv2.imshow("webcam_annotated", annotated_img)
         
         key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'):
+        if key == ord("q"):
             break
 
     cap.release()

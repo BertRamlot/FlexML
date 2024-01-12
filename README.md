@@ -37,6 +37,10 @@ The model is robust against the following phenomena, given that these were adequ
 python overlay.py --dataset my_dataset
 ```
 
+Controls:
+
+- 'q': Quit the overlay
+
 ### Training a model
 
 ```bash
@@ -51,7 +55,7 @@ Optional arguments ([train.py](./src/train.py)):
 
 ### Testing a model
 
-Note: Inference uses the same python file as the data generation. In fact, both can be done at the same time!
+Note: Inference uses the same overlay/python file as the data generation. You can do inference and data gathering at the same time.
 
 ```bash
 # Only inference
@@ -65,3 +69,7 @@ Optional inference arguments ([overlay.py](./src/overlay.py)):
 
 - `epoch`: epoch of model, defaults to latest if not passed
 - `device`: torch device
+
+## TODO
+
+- Make OS independent (i.e. remove "ctypes.windll")µ
