@@ -73,7 +73,10 @@ class DynamicDataset(Dataset):
         self.input_label_pairs = []
 
     def __len__(self):
-        return len(self.input_label_pairs)
+        # Min size needs to be atleast one for pytorch DataLoader to not throw an error when using "shuffle=True"
+        # Another way to resolve this is to write your own custom sampler:
+        # https://stackoverflow.com/questions/70369070/can-a-pytorch-dataloader-start-with-an-empty-dataset
+        return max(1, len(self.input_label_pairs))
 
     def __getitem__(self, idx):
         return self.input_label_pairs[idx]
@@ -83,6 +86,7 @@ class DynamicDataset(Dataset):
 
 class ModelController(QThread):
     def __init__(self):
+        super().__init__()
         pass
 
     def run(self):
@@ -106,10 +110,14 @@ class ModelElement(QObject):
             self.epoch = checkpoint["epoch"]
             if model_type != checkpoint["model_type"]:
                 print("WARNING: provided 'model_type' does not correspond with checkpoint 'model_type'")
-            model_type = checkpoint["model_type"]
+            self.model_type = checkpoint["model_type"]
         else:
+            checkpoint = None
+            self.epoch = 0
+            self.model_type = model_type
             model_path.mkdir(parents=True, exist_ok=True)
         
+        # TODO: use 'self.model_type'
         model = FaceNetwork().to(self.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
 
@@ -129,7 +137,6 @@ class ModelElement(QObject):
             "criterion": lambda y1, y2: (y1-y2).pow(2).sum(-1).sqrt().mean()
         }
 
-
         self.tb_writer = SummaryWriter(model_path / "logs") if TENSORBOARD_FOUND else None
 
         
@@ -137,12 +144,13 @@ class ModelElement(QObject):
         self.datasets = {}
         self.data_loaders = {}
         for config in dataset_configs:
-            dataset = DynamicDataset(self.device, type=config.type)
+            t = config["type"]
+            dataset = DynamicDataset(type=t)
             if "dataloader_kwargs" not in config:
                 config["dataloader_kwargs"] = {}
-            data_loader = DataLoader(dataset, **config.dataloader_kwargs)
-            self.datasets[config.type] = dataset
-            self.data_loaders[config.type] = data_loader
+            data_loader = DataLoader(dataset, **config["dataloader_kwargs"])
+            self.datasets[t] = dataset
+            self.data_loaders[t] = data_loader
 
     @pyqtSlot(torch.Tensor)
     def request_inference(self, X: torch.Tensor):

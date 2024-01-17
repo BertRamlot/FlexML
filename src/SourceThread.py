@@ -19,7 +19,7 @@ class SourceThread(QThread):
         self.timeout = timeout
 
     def run(self):
-        while self.is_done():
+        while not self.is_done():
             success, item = self.get()
             if success:
                 self.new_item.emit(item)
@@ -36,7 +36,7 @@ class WebcamSourceThread(SourceThread):
     def __init__(self, timeout: int, index: int = 0):
         super().__init__(timeout)
         print(f"Starting camera {index}... (this can take a while, I don't know why)")
-        self.cap = cv2.VideoCapture(index)
+        self.cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
 
     def __del__(self):
         self.cap.release()

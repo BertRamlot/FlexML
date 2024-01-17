@@ -28,11 +28,11 @@ class FaceSampleToTensor(QObject):
         tensor_vals.append(left_eye_tensor.flatten()/torch.mean(left_eye_tensor))
         tensor_vals.append(right_eye_tensor.flatten()/torch.mean(right_eye_tensor))
         
-        screen_max_dim = sample.get_img()[:2].shape.max()
+        screen_max_dim = max(sample.get_img()[:2].shape)
         rel_features = sample.features / screen_max_dim
         face_rel_tl_xy = np.min(sample.features, axis=0) / screen_max_dim
-        face_rel_wh = sample.get_face_img().shape[:2] / screen_max_dim
-        eyes_center = sample.features[36:48].average(axis=0) / screen_max_dim
+        face_rel_wh = np.array(sample.get_face_img().shape[:2]) / screen_max_dim
+        eyes_center = sample.features[36:48].mean(axis=0) / screen_max_dim
 
         tensor_vals.append(torch.Tensor(rel_features).flatten())
         tensor_vals.append(torch.Tensor(face_rel_tl_xy).flatten())
