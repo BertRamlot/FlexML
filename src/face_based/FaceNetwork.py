@@ -2,14 +2,20 @@ import cv2
 import numpy as np
 import torch
 from torch import nn
+from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from src.face_based.FaceSample import FaceSample
-from src.Sample import SampleToTensor
 
 
-class FaceSampleToTensor(SampleToTensor):
+class FaceSampleToTensor(QObject):
+    output_tensor = pyqtSignal(torch.Tensor)
 
-    def to_tensor(self, sample: FaceSample, device: str) -> torch.tensor:
+    def __init__(self, device: str):
+        super().__init__()
+        self.device = device
+
+    @pyqtSlot(FaceSample)
+    def to_tensor(self, sample: FaceSample) -> torch.Tensor:
         def pre_process_img(img):
             processed_img = cv2.resize(img, (40, 10), interpolation=cv2.INTER_CUBIC)
             processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2GRAY)
@@ -33,11 +39,12 @@ class FaceSampleToTensor(SampleToTensor):
         tensor_vals.append(torch.Tensor(face_rel_wh).flatten())
         tensor_vals.append(torch.Tensor(eyes_center).flatten())
         
-        return torch.cat(tensor_vals, dim=0).float().to(device=device)
+        tensor = torch.cat(tensor_vals, dim=0).float().to(device=self.device)
+        self.output_tensor.emit(tensor)
 
 class FaceNetwork(nn.Module):
     def __init__(self):
-        super(FaceNetwork, self).__init__()
+        super().__init__()
 
         self.metadata_size = 4 + 68*2
         self.input_eye_size = 40*10

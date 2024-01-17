@@ -1,8 +1,9 @@
 import numpy as np
 import cv2
 import dlib
+from PyQt6.QtCore import QObject, pyqtSlot, pyqtSignal
 
-from src.Sample import Sample, SampleConvertor
+from src.Sample import Sample
 
 
 class FaceSample(Sample):
@@ -38,22 +39,20 @@ class FaceSample(Sample):
         max_x, max_y = self.features[idx:idx+6].max(axis=0)
         return self.get_img()[min_y:max_y, min_x:max_x]
 
-class FaceSampleConvertor(SampleConvertor):
-    """Generates (face_img, face_features, screen_looking_position) pairs."""
+class FaceSampleConvertor(QObject):
+    face_samples = pyqtSignal(object)
 
     def __init__(self):
+        super().__init__()
         print("Loading face/feature model")
         self.face_detector = dlib.get_frontal_face_detector()
         self.face_feature_predictor = dlib.shape_predictor("src/face_based/shape_predictor_68_face_landmarks.dat")
 
-    def convert_sample(self, sample: Sample) -> list[FaceSample]:
-        # Run face detector
+    @pyqtSlot(Sample)
+    def convert_sample(self, sample: Sample):
         img = sample.get_img()
         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        faces_samples = []
         for approx_face_box in self.face_detector(gray_img):
             landmarks = self.face_feature_predictor(gray_img, box=approx_face_box)
             features = np.array([[p.x, p.y] for p in landmarks.parts()])
-            faces_samples.append(FaceSample(sample, features))
-
-        return faces_samples
+            self.face_samples.emit(FaceSample(sample, features))
