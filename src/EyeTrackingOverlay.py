@@ -48,18 +48,18 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
         if not self.gt_history:
             return
         position = self.gt_history[-1]
-        outer_ring_color = QtCore.Qt.yellow
-        inner_ring_color = QtCore.Qt.red
+        outer_ring_color = QtCore.Qt.GlobalColor.yellow
+        inner_ring_color = QtCore.Qt.GlobalColor.red
 
         x, y = position.round().astype(np.int32)
 
         r = 10
-        pen = QtGui.QPen(outer_ring_color, 8, QtCore.Qt.SolidLine)
+        pen = QtGui.QPen(outer_ring_color, 8, QtCore.Qt.PenStyle.SolidLine)
         qp.setPen(pen)
         qp.drawEllipse(x-r, y-r, 2*r, 2*r)
 
         r = 5
-        pen = QtGui.QPen(inner_ring_color, 2, QtCore.Qt.SolidLine)
+        pen = QtGui.QPen(inner_ring_color, 2, QtCore.Qt.PenStyle.SolidLine)
         qp.setPen(pen)
         qp.drawEllipse(x-r, y-r, 2*r, 2*r)
 
@@ -67,8 +67,8 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
         if not self.inference_history:
             return
         
-        colors = (QtCore.Qt.blue, QtCore.Qt.green, QtCore.Qt.red, QtCore.Qt.yellow)
-        pen = QtGui.QPen(QtCore.Qt.green, 4, QtCore.Qt.SolidLine)
+        colors = (QtCore.Qt.GlobalColor.blue, QtCore.Qt.GlobalColor.green, QtCore.Qt.GlobalColor.red, QtCore.Qt.GlobalColor.yellow)
+        pen = QtGui.QPen(QtCore.Qt.GlobalColor.green, 4, QtCore.Qt.GlobalColor.SolidLine)
 
         if len(self.inference_history[-1]) == 0:
             r = 200
