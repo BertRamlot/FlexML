@@ -7,6 +7,7 @@ from src.EyeTrackingOverlay import EyeTrackingOverlay
 from src.SourceThread import SimpleBallSourceThread, WebcamSourceThread, DatasetSource
 from src.ModelThread import ModelElement, ModelController
 from src.Sample import SampleGenerator
+from src.Buffer import BufferThread
 
 from src.face_based.FaceSample import FaceSampleConvertor
 from src.face_based.FaceNetwork import FaceSampleToTensor
@@ -20,7 +21,7 @@ def get_source_worker(uid: str|None):
         return None
     elif uid == "simple-ball":
         # Low timeout to keep GUI stutters to a minimum
-        return SimpleBallSourceThread(0.03)
+        return SimpleBallSourceThread(0.01)
     elif uid == "webcam":
         # Slight timeout to prevent to many samples that are near equal
         return WebcamSourceThread(0.2)
@@ -89,10 +90,13 @@ if __name__ == "__main__":
     dataset_drain = DatasetDrain(Path("datasets") / args.save_dataset) if args.save_dataset else None
 
     # Live pipeline
-    link_elements(img_src_thread, sample_generator, sample_convertor, face_sample_to_tensor, model, overlay)
-    link_elements(gt_src_thread, sample_generator)
-    link_elements(sample_convertor, dataset_drain)
-    # link_elements(model_thread, gt_src_thread)
+    import queue
+    sample_buffer = BufferThread(queue.Queue(5))
+    link_elements(img_src_thread, ("set_last_img", sample_generator), sample_buffer)
+    link_elements(gt_src_thread, ("set_last_label", sample_generator))
+    link_elements(sample_buffer, sample_convertor) # , dataset_drain)
+    # link_elements(sample_convertor, face_sample_to_tensor, model, overlay)
+    link_elements(gt_src_thread, overlay)
 
     if model_controller:
         model_controller.start()
@@ -108,6 +112,8 @@ if __name__ == "__main__":
             dataset_source.wait()
 
     # Start live sources
+    if sample_buffer:
+        sample_buffer.start()
     if gt_src_thread:
         gt_src_thread.start()
     if img_src_thread:
