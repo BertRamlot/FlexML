@@ -1,13 +1,18 @@
 import sys
 from pathlib import Path
 from argparse import ArgumentParser
-from PyQt5 import QtWidgets
+from PyQt6 import QtWidgets
 
+from src.EyeTrackingOverlay import EyeTrackingOverlay
 from src.SourceThread import SimpleBallSourceThread, WebcamSourceThread, DatasetSource
-from src.ModelThread import ModelThread
+from src.ModelThread import ModelElement, ModelController
 from src.Sample import SampleGenerator
 
 from src.face_based.FaceSample import FaceSampleConvertor
+from src.face_based.FaceNetwork import FaceSampleToTensor
+from src.Sample import DatasetDrain
+
+from src.Linker import link_elements
 
 
 def get_source_worker(uid: str|None):
@@ -28,73 +33,79 @@ def get_network(uid: str):
 
 if __name__ == "__main__":
     parser = ArgumentParser(description="Overlay script parameters")
-    parser.add_argument("--dataset", type=str, default=None)
     parser.add_argument("--load_datasets", type=str, nargs="*", default=None)
     parser.add_argument("--save_dataset", type=str, default=None)
-    parser.add_argument("--gt_source", type=str, default="simple-ball", choices=["simple-ball"])
-    parser.add_argument("--img_source", type=str, default="webcam", choices=["webcam"])
-    # Model selection
+    parser.add_argument("--gt_source", type=str, default=None, choices=["simple-ball"])
+    parser.add_argument("--img_source", type=str, default=None, choices=["webcam"])
     parser.add_argument("--model", type=str, default=None)
-    parser.add_argument("--model_type", type=str, defult="face", choices=["face"])
-    parser.add_argument("--epoch", type=int, default=None)
+    parser.add_argument("--model_type", type=str, default="face", choices=["face"])
     parser.add_argument('--device', type=str, default="cuda")
-    # Model training
     parser.add_argument("--live_train", type=bool, default=False)
-    parser.add_argument("--lr", type=float, default=1e-2)
     args = parser.parse_args(sys.argv[1:])
 
-    app = QtWidgets.QApplication([])
+
+    app = QtWidgets.QApplication(sys.argv)
 
     # Create overlay
-    from src.EyeTrackingOverlay import EyeTrackingOverlay
-    window = EyeTrackingOverlay()
-    window.showFullScreen()
-
-    # Create dataset loaders
-    if args.load_datasets:
-        sample_sources = [DatasetSource(load_dataset_path) for load_dataset_path in args.load_datasets]
-    else:
-        sample_sources = []
-
+    overlay = EyeTrackingOverlay()
 
     # Create model thread
-    if args.model and args.dataset:
-        model_thread = ModelThread(
+    if args.model:
+        model_controller = ModelController(
+
+        )
+        model = ModelElement(
             Path("models") / args.model,
             args.model_type,
             args.device,
-            args.live_train
+            args.live_train,
+            [
+                {
+                    "type": "train",
+                    "dataloader_kwargs": {
+                        "batch_size": 32,
+                        "shuffle": True
+                    }
+                },
+                {
+                    "type": "val"
+                },
+                {
+                    "type": "test"
+                }
+            ]
         )
-        model_thread.predicted_samples.connect(window.register_inference_positions)
     else:
-        model_thread = None
+        model_controller = None
+        model = None
 
-    # Create source threads
-    if args.dataset:
-        print("Dataset passed, generating data")
-        gt_src_thread = get_source_worker(args.gt_source) 
-        img_src_thread = get_source_worker(args.img_source) 
+    gt_src_thread = get_source_worker(args.gt_source) 
+    img_src_thread = get_source_worker(args.img_source)
+    sample_generator = SampleGenerator()
+    
+    sample_convertor = FaceSampleConvertor()
+    face_sample_to_tensor = FaceSampleToTensor(args.device)
 
-        dataset_path = Path("datasets") / args.dataset
-        sample_generator = SampleGenerator(dataset_path, FaceSampleConvertor())
-        if gt_src_thread:
-            gt_src_thread.new_item.connect(sample_generator.set_last_label)
-            gt_src_thread.new_item.connect(window.register_gt_position)
-        if img_src_thread:
-            img_src_thread.new_item.connect(sample_generator.set_last_img)
+    dataset_drain = DatasetDrain(Path("datasets") / args.save_dataset) if args.save_dataset else None
 
+    # Live pipeline
+    link_elements(img_src_thread, sample_generator, sample_convertor, face_sample_to_tensor, model, overlay)
+    link_elements(gt_src_thread, sample_generator)
+    link_elements(sample_convertor, dataset_drain)
+    # link_elements(model_thread, gt_src_thread)
 
-    if sample_generator and model_thread:
-        sample_generator.new_sample.connect(model_thread.add_sample)
-
-    if model_thread:
-        model_thread.start()
-
-    # Start and finish disk sources
-    for sample_source in sample_sources:
-        sample_source.start()
-    for sample_source in sample_sources:
-        sample_source.wait()
+    if model_controller:
+        model_controller.start()
+    
+    # Load all data from disk
+    if args.load_datasets:
+        dataset_sources = [DatasetSource(load_dataset_path) for load_dataset_path in args.load_datasets]
+        for dataset_source in dataset_sources:
+            link_elements(dataset_source, sample_convertor)
+        for dataset_source in dataset_sources:
+            dataset_source.start()
+        for dataset_source in dataset_sources:
+            dataset_source.wait()
 
     # Start live sources
     if gt_src_thread:
@@ -103,4 +114,4 @@ if __name__ == "__main__":
         img_src_thread.start()
 
     # Event loop
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
