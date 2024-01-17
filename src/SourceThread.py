@@ -6,7 +6,7 @@ import cv2
 import win32api
 import pandas as pd
 from pathlib import Path
-from PyQt5.QtCore import QObject, QThread, pyqtSignal
+from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 from src.Sample import Sample
 
@@ -15,7 +15,7 @@ class SourceThread(QThread):
     new_item = pyqtSignal(np.ndarray)
 
     def __init__(self, timeout: float):
-        super(SourceThread, self).__init__()
+        super().__init__()
         self.timeout = timeout
 
     def run(self):
@@ -34,7 +34,7 @@ class SourceThread(QThread):
 
 class WebcamSourceThread(SourceThread):
     def __init__(self, timeout: int, index: int = 0):
-        super(WebcamSourceThread, self).__init__(timeout)
+        super().__init__(timeout)
         print(f"Starting camera {index}... (this can take a while, I don't know why)")
         self.cap = cv2.VideoCapture(index)
 
@@ -48,7 +48,7 @@ class SimpleBallSourceThread(SourceThread):
     """Ball that moves straight at a constant speed. When touching the edge of the screen, it bounces in a random direction."""
 
     def __init__(self, timeout: int):
-        super(SimpleBallSourceThread, self).__init__(timeout)
+        super().__init__(timeout)
         self.screen_bounds = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
 
         self.ball_time = None
@@ -84,7 +84,7 @@ class ClickListenerSourceThread(SourceThread):
     """Records where the mouse clicks."""
 
     def __init__(self, timeout: int, buttons = [1, 2]):
-        super(ClickListenerSourceThread, self).__init__(timeout)
+        super().__init__(timeout)
         self.button_states = { k : 1 for k in buttons}
 
     def get(self) -> tuple[bool, tuple[float, float]]:
@@ -106,7 +106,7 @@ class ClickListenerSourceThread(SourceThread):
 
 class DatasetSource(SourceThread):
     def __init__(self, dataset_path: Path):
-        super(DatasetSource, self).__init__(0.0)
+        super().__init__(0.0)
         self.metadata_imgs = pd.read_csv(dataset_path / "metadata.csv")
         self.img_path = dataset_path / "raw"
         self.curr_index = 0

@@ -1,12 +1,18 @@
 # EyeTracker
 
-Predicts where you are looking at on your screen based on your webcam.
+Eye tracking framework for constructing a graph of ML-pipeline-components to:
+
+- generate eye data
+- train models
+- do demos/inference
+
+Eye tracking specifically refers to "Predicting where you are looking at on your screen based on your webcam."
+
+All of the above can be done simultaniously and in real time, even allowing for feedback from the model to the data generation source (e.g. if a large error exits for samples in a certain area, the model can instruct the data generation tools to sample that area).
 
 Features:
 
 - Supports tracking multiple people at once
-- Designed to make it easy for anyone to (1) gather data, and (2) train their own model
-- Fast data gathering and training, a basic model takes about 2 minutes to create from scratch
 
 ## Results
 

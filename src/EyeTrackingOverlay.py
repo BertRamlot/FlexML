@@ -1,17 +1,18 @@
 import numpy as np
 import ctypes
-from PyQt5 import QtGui, QtWidgets, QtCore
+from PyQt6 import QtGui, QtWidgets, QtCore
 
 
 class EyeTrackingOverlay(QtWidgets.QMainWindow):
     def __init__(self):
-        super(EyeTrackingOverlay, self).__init__(None, QtCore.Qt.WindowStaysOnTopHint)
+        super().__init__(None, QtCore.Qt.WindowType.WindowStaysOnTopHint)
 
         self.window_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
         self.setGeometry(0, 0, *self.window_dims)
         self.setStyleSheet("background:transparent")
-        self.setWindowFlags(QtCore.Qt.FramelessWindowHint)
-        self.setAttribute(QtCore.Qt.WA_TranslucentBackground, True)
+        self.setWindowFlags(QtCore.Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.showFullScreen()
 
         self.gt_history = []
         self.inference_history = []
@@ -31,7 +32,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
         self.update()
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
-        super(EyeTrackingOverlay, self).keyPressEvent(event)
+        super().keyPressEvent(event)
         if event.key() == ord("q"):
             print("Closing EyeTrackingOverlay")
             self.close()
