@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 import csv
-import torch
+import time
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 
@@ -76,13 +76,13 @@ class SampleGenerator(QObject):
         self.last_img = None
         self.last_label = None
 
-    @pyqtSlot(np.ndarray, bool)
-    def set_last_label(self, label: np.ndarray, publish: bool|None = False):
+    @pyqtSlot(np.ndarray)
+    def set_last_label(self, label: np.ndarray, publish: bool = False):
         self.last_label = label
         if publish:
             self.publish_sample()
 
-    @pyqtSlot(np.ndarray, bool)
+    @pyqtSlot(np.ndarray)
     def set_last_img(self, img: np.ndarray, publish: bool = True):
         self.last_img = img
         if publish:
@@ -94,6 +94,7 @@ class SampleGenerator(QObject):
 
 class DatasetDrain(QObject):
     def __init__(self, dataset_path: Path):
+        super().__init__()
         self.dataset_path = dataset_path
     
     @pyqtSlot(Sample)

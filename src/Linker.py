@@ -6,7 +6,7 @@ from src.face_based.FaceSample import FaceSampleConvertor
 
 
 
-def get_non_pyqt_methods(obj: QObject, method_type: QMetaMethod.MethodType, func_name: str|None) -> list[tuple[str, Callable, QMetaMethod]]:
+def get_non_pyqt_methods(obj: QObject, method_type: QMetaMethod.MethodType, func_name: str|None) -> list[tuple[str, Callable, QMetaMethod]]:    
     candidate_methods = {}
     for subcls in type(obj).mro():
         if subcls.__module__.startswith("PyQt6."):
@@ -44,39 +44,41 @@ def link_elements(*elements):
     # Unify input
     tuple_elements = []
     for element in elements:
-        slot_name, obj, signal_name = None, None, None
         if element is None:
+            tuple_elements.append((None, None, None))
             continue
-        elif isinstance(element, tuple):
+        if isinstance(element, tuple):
             if len(element) == 3:
-                slot_name, obj, signal_name = element
-            elif len(element) == 2:
+                tuple_elements.append(element)
+                continue
+            if len(element) == 2:
                 if isinstance(element[0], QObject):
                     obj, signal_name = element
-                elif isinstance(element[1], QObject):
-                    slot_name, obj = element
-                else:
+                    tuple_elements.append((None, obj, signal_name))
                     continue
-            else:
-                raise ValueError("Invalid tuple (Wrong length):", element)
-        elif isinstance(element, QObject):
+                if isinstance(element[1], QObject):
+                    slot_name, obj = element
+                    tuple_elements.append((slot_name, obj, None))
+                    continue
+            raise ValueError("Invalid tuple (Wrong length):", element)
+        if isinstance(element, QObject):
             obj = element
-        else:
-            raise ValueError("Invalid element (Invalid type):", element)
+            tuple_elements.append((None, obj, None))
+            continue
+        raise ValueError("Invalid element (Invalid type):", element)
 
-        tuple_elements.append((slot_name, obj, signal_name))
     
-    for i in range(len(tuple_elements)-1):
+    for i in range(1, len(tuple_elements)):
         _, send_obj, send_signal_name = tuple_elements[i-1]
         rcv_slot_name, rcv_obj, _ = tuple_elements[i]
 
-        signals = get_non_pyqt_methods(send_obj, QMetaMethod.MethodType.Signal, send_signal_name)
-        for signal_name, signal_method, signal_meta_method in signals:
-            print("TYPES SIGN:", signal_name, signal_meta_method.parameterTypes())
-        slots = get_non_pyqt_methods(rcv_obj, QMetaMethod.MethodType.Slot, rcv_slot_name)
-        for slot_name, slot_method, slot_meta_method in slots:
-            print("TYPES SLOT:", slot_name, slot_meta_method.parameterTypes())
+        if send_obj is None or rcv_obj is None:
+            print(f"Skipping connection: {send_obj} {rcv_obj}")
+            continue
 
+        signals = get_non_pyqt_methods(send_obj, QMetaMethod.MethodType.Signal, send_signal_name)
+        slots = get_non_pyqt_methods(rcv_obj, QMetaMethod.MethodType.Slot, rcv_slot_name)
+        
         for signal_name, signal_method, signal_meta_method in signals:
             signal_param_types = signal_meta_method.parameterTypes()
             matching_slots = []

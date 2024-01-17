@@ -5,7 +5,7 @@ from src.face_based.FaceSample import FaceDetector
 
 def main():
     print("Starting camera ... (this can take a while, I don't know why)")
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
     face_detector = FaceDetector(cap)
 
     face_colors = [(255, 0, 0), (0, 255, 0), (0, 0, 255)]
