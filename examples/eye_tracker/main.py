@@ -1,19 +1,21 @@
 import sys
+import os
 from pathlib import Path
 from argparse import ArgumentParser
 from PyQt6 import QtWidgets
 
-from src.EyeTrackingOverlay import EyeTrackingOverlay
-from src.SourceThread import SimpleBallSourceThread, WebcamSourceThread, DatasetSource
-from src.ModelThread import ModelElement, ModelController
-from src.Sample import SampleGenerator
-from src.Buffer import BufferThread
+from FlexML.SourceThread import WebcamSourceThread, DatasetSource
+from FlexML.ModelThread import ModelElement, ModelController
+from FlexML.Sample import SampleMuxer
+from FlexML.Helper import BufferThread, AttributeSelector
+from FlexML.Sample import DatasetDrain
 
-from src.face_based.FaceSample import FaceSampleConvertor
-from src.face_based.FaceNetwork import FaceSampleToTensor
-from src.Sample import DatasetDrain
+from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
+from examples.eye_tracker.src.TargetSource import SimpleBallSourceThread
+from examples.eye_tracker.src.FaceSample import FaceSampleConvertor
+from examples.eye_tracker.src.FaceNetwork import FaceSampleToTensor
 
-from src.Linker import link_elements
+from FlexML.Linker import link_elements
 
 
 def get_source_worker(uid: str|None):
@@ -41,8 +43,9 @@ if __name__ == "__main__":
     parser.add_argument("--model", type=str, default=None)
     parser.add_argument("--model_type", type=str, default="face", choices=["face"])
     parser.add_argument('--device', type=str, default="cuda")
-    parser.add_argument("--live_train", type=bool, default=False)
     args = parser.parse_args(sys.argv[1:])
+
+    module_directory = Path(__file__).resolve().parent
 
 
     app = QtWidgets.QApplication(sys.argv)
@@ -56,10 +59,9 @@ if __name__ == "__main__":
 
         )
         model = ModelElement(
-            Path("models") / args.model,
+            module_directory / Path("models") / args.model,
             args.model_type,
             args.device,
-            args.live_train,
             [
                 {
                     "type": "train",
@@ -82,15 +84,17 @@ if __name__ == "__main__":
 
     gt_src_thread = get_source_worker(args.gt_source) 
     img_src_thread = get_source_worker(args.img_source)
-    sample_generator = SampleGenerator()
-    
+    sample_generator = SampleMuxer()
+    sample_generator.moveToThread(img_src_thread)
+
+
     import queue
     sample_buffer = BufferThread(queue.Queue(5))
-    sample_convertor = FaceSampleConvertor()
+    sample_convertor = FaceSampleConvertor(module_directory / "shape_predictor_68_face_landmarks.dat")
     sample_convertor.moveToThread(sample_buffer)
     face_sample_to_tensor = FaceSampleToTensor(args.device)
 
-    dataset_drain = DatasetDrain(Path("datasets") / args.save_dataset) if args.save_dataset else None
+    dataset_drain = DatasetDrain(module_directory / Path("datasets") / args.save_dataset) if args.save_dataset else None
 
     # Live pipeline
     link_elements(img_src_thread, ("set_last_img", sample_generator), sample_buffer)

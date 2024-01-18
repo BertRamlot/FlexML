@@ -1,9 +1,5 @@
 from typing import Callable
-from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot, QMetaMethod, QMetaObject
-
-from src.Sample import SampleGenerator
-from src.face_based.FaceSample import FaceSampleConvertor
-
+from PyQt6.QtCore import QObject, QMetaMethod
 
 
 def get_non_pyqt_methods(obj: QObject, method_type: QMetaMethod.MethodType, func_name: str|None) -> list[tuple[str, Callable, QMetaMethod]]:    
@@ -93,8 +89,8 @@ def link_elements(*elements):
                 continue
             elif len(matching_slots) > 1:
                 print("WARNING: multiple valid signal/slot combinations found!")
-            print("Conncection:")
-            print(f"- '{signal_method}'")
-            print(f"- '{matching_slots[0]}'")
+            # print("Conncection:")
+            # print(f"- '{signal_method}'")
+            # print(f"- '{matching_slots[0]}'")
             signal_method.connect(matching_slots[0])
             

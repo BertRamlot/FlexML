@@ -1,6 +1,6 @@
 import cv2
 
-from src.face_based.FaceSample import FaceDetector
+from FlexML.eye_tracker.FaceSample import FaceDetector
 
 
 def main():

@@ -2,5 +2,5 @@ __pycache__/
 .vscode/
 
 # Ignore any data/model
-datasets/*
-models/*
+examples/eye_tracker/datasets/*
+examples/eye_tracker/models/*

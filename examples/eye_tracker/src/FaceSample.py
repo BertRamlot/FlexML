@@ -1,9 +1,10 @@
 import numpy as np
 import dlib
 import cv2
+from pathlib import Path
 from PyQt6.QtCore import QObject, pyqtSlot, pyqtSignal
 
-from src.Sample import Sample
+from FlexML.Sample import Sample
 
 
 class FaceSample(Sample):
@@ -42,10 +43,10 @@ class FaceSample(Sample):
 class FaceSampleConvertor(QObject):
     face_samples = pyqtSignal(object)
 
-    def __init__(self):
+    def __init__(self, shape_predictor_path: Path):
         super().__init__()
         self.face_detector = dlib.get_frontal_face_detector()
-        self.face_feature_predictor = dlib.shape_predictor("src/face_based/shape_predictor_68_face_landmarks.dat")
+        self.face_feature_predictor = dlib.shape_predictor(str(shape_predictor_path))
 
     @pyqtSlot(Sample)
     def convert_sample(self, sample: Sample):

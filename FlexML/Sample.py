@@ -32,7 +32,10 @@ class Sample():
         images_dir_path = dataset_path / "raw"
         images_dir_path.mkdir(parents=True, exist_ok=True)
         if self.img_path is None:
-            x, y = self.gt_pos
+            if self.gt_pos is None:
+                x, y = -1, -1
+            else:
+                x, y = self.gt_pos
             file_name = None
             i = 0
             while file_name is None or (images_dir_path / file_name).is_file():
@@ -61,13 +64,17 @@ class Sample():
         return []
 
     def get_metadata(self) -> list:
-        return [self.img_path, self.type, self.gt_pos[0], self.gt_pos[1]] + self.get_extra_metadata()
+        if self.gt_pos is None:
+            x, y = None, None
+        else:
+            x, y = self.gt_pos
+        return [self.img_path, self.type, x, y] + self.get_extra_metadata()
     
     def get_metadata_headers(self) -> list[str]:
         return ["img_path", "type", "x", "y"] + self.get_extra_metadata_headers()
 
 # SampleMuxer?
-class SampleGenerator(QObject):
+class SampleMuxer(QObject):
     new_sample = pyqtSignal(Sample)
 
     def __init__(self):

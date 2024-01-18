@@ -11,7 +11,7 @@ except ImportError:
     TENSORBOARD_FOUND = False
     print("Tensorboard not found")
 
-from src.face_based.FaceNetwork import FaceNetwork
+from examples.eye_tracker.src.FaceNetwork import FaceNetwork
 
 
 def test_epoch(test_loader, model, device, loss_functions):
@@ -97,7 +97,7 @@ class ModelElement(QObject):
 
     predicted_samples = pyqtSignal(tuple)
 
-    def __init__(self, model_path: str, model_type: str, device: str, training: bool, dataset_configs: list):
+    def __init__(self, model_path: str, model_type: str, device: str, dataset_configs: list):
         super().__init__()
 
         self.device = device
@@ -121,11 +121,11 @@ class ModelElement(QObject):
         model = FaceNetwork().to(self.device)
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
 
+        model.eval()
+
         if checkpoint:
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-
-        model.train(training)
 
         self.inference_queue_mutex = QMutex()
         self.inference_queue = []
@@ -154,6 +154,7 @@ class ModelElement(QObject):
 
     @pyqtSlot(torch.Tensor)
     def request_inference(self, X: torch.Tensor):
+
         self.inference_queue_mutex.lock()
         self.inference_queue.append(X)
         self.inference_queue_mutex.unlock()
@@ -163,6 +164,8 @@ class ModelElement(QObject):
         self.data_mutex.lock()
         if type not in self.datasets:
             raise ValueError("Unexpected type:", type)
+        if not self.model.training:
+            self.model.train()
         self.datasets[type].add_pair(X, y)
         self.data_mutex.unlock()
     

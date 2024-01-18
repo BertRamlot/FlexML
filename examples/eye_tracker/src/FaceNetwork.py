@@ -4,7 +4,7 @@ import torch
 from torch import nn
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
-from src.face_based.FaceSample import FaceSample
+from examples.eye_tracker.src.FaceSample import FaceSample
 
 
 class FaceSampleToTensor(QObject):
