@@ -1,11 +1,6 @@
 import numpy as np
-import cv2
 import dlib
-import multiprocessing
-import queue
-import subprocess
-import sys
-import pickle
+import cv2
 from PyQt6.QtCore import QObject, pyqtSlot, pyqtSignal
 
 from src.Sample import Sample
@@ -49,38 +44,19 @@ class FaceSampleConvertor(QObject):
 
     def __init__(self):
         super().__init__()
-        self.proc = subprocess.Popen(
-            [sys.executable, "-m", "src.face_based.face_detector"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
+        self.face_detector = dlib.get_frontal_face_detector()
+        self.face_feature_predictor = dlib.shape_predictor("src/face_based/shape_predictor_68_face_landmarks.dat")
 
     @pyqtSlot(Sample)
     def convert_sample(self, sample: Sample):
-        img_bytes = sample.get_img().tobytes()
-        img_shape = sample.get_img().shape
-        print("CS", img_shape, len(img_bytes))
-
-        try:
-            self.proc.stdin.write(int.to_bytes(len(img_bytes), length=4))
-            self.proc.stdin.write(img_bytes)
-            self.proc.stdin.flush()
-
-            length = int.from_bytes(self.proc.stdout.read(4))
-            if length > 0:
-                result_bytes = self.proc.stdout.read(length)
-                result = np.frombuffer(result_bytes, dtype=np.int32).reshape((-1, 68, 2))
-                for i in range(result.shape[0]):
-                    new_sample = FaceSample(sample, result[i])
-                    self.face_samples.emit(new_sample)
-        except Exception as e:
-            print(f"Error communicating with subprocess: {e}")
-
-            # Capture and print any errors from the subprocess
-            err_output = self.proc.stderr.read()
-            if err_output:
-                print(f"Subprocess error\n{err_output.decode('utf-8')}")
-        finally:
-            self.proc.terminate()
-            self.proc.wait()
+        img = sample.get_img()        
+        gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        face_boxes = self.face_detector(gray_img)
+        # features = np.zeros((len(face_boxes), 68, 2), dtype=np.int32)
+        for i, face_box in enumerate(face_boxes):
+            landmarks = self.face_feature_predictor(gray_img, box=face_box)
+            face_features = np.array([[p.x, p.y] for p in landmarks.parts()])
+            # features[i, :, :] = face_features
+            face_sample = FaceSample(sample, face_features)
+            self.face_samples.emit(face_sample)
+        

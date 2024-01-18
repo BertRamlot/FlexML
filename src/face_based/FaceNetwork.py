@@ -11,7 +11,7 @@ class FaceSampleToTensor(QObject):
     output_tensor = pyqtSignal(torch.Tensor)
 
     def __init__(self, device: str):
-        super().__init__()
+        super().__init__(None)
         self.device = device
 
     @pyqtSlot(FaceSample)

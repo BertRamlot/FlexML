@@ -6,8 +6,9 @@ class BufferThread(QThread):
     new_item = pyqtSignal(object)
 
     def __init__(self, queue: queue.Queue):
-        super().__init__()
+        super().__init__(None)
         self._queue = queue
+        self.start()
 
     @pyqtSlot(object)
     def push(self, item):

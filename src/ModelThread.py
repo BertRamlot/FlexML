@@ -156,7 +156,7 @@ class ModelElement(QObject):
     def request_inference(self, X: torch.Tensor):
         self.inference_queue_mutex.lock()
         self.inference_queue.append(X)
-        self.inference_queue_mutex.un_lock()
+        self.inference_queue_mutex.unlock()
 
     @pyqtSlot(torch.Tensor, torch.Tensor, str)
     def add_training_pair(self, X: torch.Tensor, y: torch.Tensor, type: str):

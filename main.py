@@ -84,19 +84,21 @@ if __name__ == "__main__":
     img_src_thread = get_source_worker(args.img_source)
     sample_generator = SampleGenerator()
     
+    import queue
+    sample_buffer = BufferThread(queue.Queue(5))
     sample_convertor = FaceSampleConvertor()
+    sample_convertor.moveToThread(sample_buffer)
     face_sample_to_tensor = FaceSampleToTensor(args.device)
 
     dataset_drain = DatasetDrain(Path("datasets") / args.save_dataset) if args.save_dataset else None
 
     # Live pipeline
-    import queue
-    sample_buffer = BufferThread(queue.Queue(5))
     link_elements(img_src_thread, ("set_last_img", sample_generator), sample_buffer)
     link_elements(gt_src_thread, ("set_last_label", sample_generator))
-    link_elements(sample_buffer, sample_convertor) # , dataset_drain)
-    # link_elements(sample_convertor, face_sample_to_tensor, model, overlay)
+    link_elements(sample_buffer, sample_convertor, dataset_drain)
+    link_elements(sample_convertor, face_sample_to_tensor, model, overlay)
     link_elements(gt_src_thread, overlay)
+
 
     if model_controller:
         model_controller.start()
@@ -112,8 +114,6 @@ if __name__ == "__main__":
             dataset_source.wait()
 
     # Start live sources
-    if sample_buffer:
-        sample_buffer.start()
     if gt_src_thread:
         gt_src_thread.start()
     if img_src_thread:

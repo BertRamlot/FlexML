@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 from pathlib import Path
 import csv
-import time
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 
@@ -72,7 +71,7 @@ class SampleGenerator(QObject):
     new_sample = pyqtSignal(Sample)
 
     def __init__(self):
-        super().__init__()
+        super().__init__(None)
         self.last_img = None
         self.last_label = None
 
@@ -94,7 +93,7 @@ class SampleGenerator(QObject):
 
 class DatasetDrain(QObject):
     def __init__(self, dataset_path: Path):
-        super().__init__()
+        super().__init__(None)
         self.dataset_path = dataset_path
     
     @pyqtSlot(Sample)

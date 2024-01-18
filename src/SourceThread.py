@@ -15,7 +15,7 @@ class SourceThread(QThread):
     new_item = pyqtSignal(np.ndarray)
 
     def __init__(self, timeout: float):
-        super().__init__()
+        super().__init__(None)
         self.timeout = timeout
 
     def run(self):
