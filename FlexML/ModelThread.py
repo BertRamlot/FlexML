@@ -1,6 +1,6 @@
 
 from pathlib import Path
-from PyQt6.QtCore import QThread, QObject, QMutex, pyqtSignal, pyqtSlot
+import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
 try:
@@ -10,61 +10,32 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
     print("Tensorboard not found")
+from PyQt6.QtCore import QThread, QObject, QMutex, pyqtSignal, pyqtSlot, QWaitCondition, QEventLoop
 
 from examples.eye_tracker.src.FaceNetwork import FaceNetwork
 
 
-def test_epoch(test_loader, model, device, loss_functions):
-    losses = { name:0.0 for name in loss_functions}
-    with torch.no_grad():
-        for X, y in test_loader:
-            X = X.to(device, non_blocking=True)
-            y = y.to(device, non_blocking=True)
+def epoch_report(tb_writer, epoch, losses, datasets):
+    # losses: { 'data_type': { 'loss_fn_name': 0.001 } }
+    loss_function_ids = []
+    for loss_fn_dict in losses.values():
+        loss_function_ids += list(loss_fn_dict.keys())
+    loss_function_ids = set(loss_function_ids)
 
-            output = model(X)
-            for name, loss_fn in loss_functions.items():
-                loss = loss_fn(output, y)
-                losses[name] += loss.item()
-   
-    for name in losses:
-        losses[name] /= len(test_loader)
-        
-    return losses
-
-def train_epoch(train_loader, model, device, loss_functions, optimizer):
-    if "criterion" not in loss_functions:
-        raise KeyError("No criterion found")
-    
-    losses = { name:0.0 for name in loss_functions}
-    for X, y in train_loader:
-        X = X.to(device, non_blocking=True)
-        y = y.to(device, non_blocking=True)
-
-        output = model(X)
-        for name, loss_fn in loss_functions.items():
-            loss = loss_fn(output, y)
-            losses[name] += loss.item()
-            if name == "criterion":
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-    
-    for name in losses:
-        losses[name] /= len(train_loader)
-
-    return losses 
-
-def training_report(tb_writer, epoch, train_losses, val_losses, test_losses):
-    for name in train_losses.keys() & val_losses.keys(): # & test_losses.keys():
+    for loss_function_id in loss_function_ids:
         dict = {}
-        if name in train_losses:
-            dict["train"] = train_losses[name]
-        if name in val_losses:
-            dict["val"] = val_losses[name]
+        for dataset_type in losses.keys():
+            if loss_function_id in losses[dataset_type]:
+                dict[dataset_type] = losses[dataset_type][loss_function_id]
         if tb_writer:
-            tb_writer.add_scalars(f'{name}_loss', dict, epoch)
+            tb_writer.add_scalars(f'{loss_function_id}_loss', dict, epoch)
 
-    print(f"{epoch:6} | train_loss={train_losses['criterion']:.5f}, val_loss={test_losses['criterion']:.5f}")
+    dataset_type_order = list(datasets.keys())
+    dataset_sizes = [f"{len(datasets[dataset_type]):4}" for dataset_type in dataset_type_order]
+    criterion_loss_strings = [f"{dataset_type}={losses[dataset_type]['criterion']:.4f}" for dataset_type in dataset_type_order]
+
+
+    print(f"{epoch:6} | samples: {' '.join(dataset_sizes)} ({' '.join(dataset_type_order)}) | losses: {', '.join(criterion_loss_strings)}")
 
 
 class DynamicDataset(Dataset):
@@ -84,22 +55,15 @@ class DynamicDataset(Dataset):
     def add_pair(self, X, y):
         self.input_label_pairs.append((X, y))
 
-class ModelController(QThread):
-    def __init__(self):
-        super().__init__()
-        pass
-
-    def run(self):
-        pass
-
 class ModelElement(QObject):
     """Manages the pytorch model."""
 
-    predicted_samples = pyqtSignal(tuple)
+    inference_results = pyqtSignal(tuple)
 
     def __init__(self, model_path: str, model_type: str, device: str, dataset_configs: list):
         super().__init__()
 
+        self.model_path = model_path
         self.device = device
 
         # Load model if it exists
@@ -119,16 +83,14 @@ class ModelElement(QObject):
         
         # TODO: use 'self.model_type'
         model = FaceNetwork().to(self.device)
-        optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+        self.optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
 
         model.eval()
 
         if checkpoint:
             model.load_state_dict(checkpoint['model_state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-        self.inference_queue_mutex = QMutex()
-        self.inference_queue = []
         self.model = model
         self.loss_functions = {
             "l1_x": lambda y1, y2: (y1[..., 0] - y2[..., 0]).abs().mean(),
@@ -140,7 +102,6 @@ class ModelElement(QObject):
         self.tb_writer = SummaryWriter(model_path / "logs") if TENSORBOARD_FOUND else None
 
         
-        self.data_mutex = QMutex()
         self.datasets = {}
         self.data_loaders = {}
         for config in dataset_configs:
@@ -152,30 +113,36 @@ class ModelElement(QObject):
             self.datasets[t] = dataset
             self.data_loaders[t] = data_loader
 
-    @pyqtSlot(torch.Tensor)
-    def request_inference(self, X: torch.Tensor):
+    @pyqtSlot(int)
+    def run_epoch(self, epoch: int) -> dict:
+        # Train/Val/Test epoch
+        all_losses = {}
+        for type, data_loader in self.data_loaders.items():
+            do_grad = (type == "train")
+            losses = { name: 0.0 for name in self.loss_functions}
+            with torch.set_grad_enabled(do_grad):
+                for X, y in data_loader:
+                    X = X.to(self.device, non_blocking=True)
+                    y = y.to(self.device, non_blocking=True)
 
-        self.inference_queue_mutex.lock()
-        self.inference_queue.append(X)
-        self.inference_queue_mutex.unlock()
+                    output = self.model(X)
+                    for name, loss_fn in self.loss_functions.items():
+                        loss = loss_fn(output, y)
+                        losses[name] += loss.item()
+                        if do_grad and name == "criterion":
+                            self.optimizer.zero_grad()
+                            loss.backward()
+                            self.optimizer.step()
+                
+            for name in losses:
+                losses[name] /= len(data_loader)
 
-    @pyqtSlot(torch.Tensor, torch.Tensor, str)
-    def add_training_pair(self, X: torch.Tensor, y: torch.Tensor, type: str):
-        self.data_mutex.lock()
-        if type not in self.datasets:
-            raise ValueError("Unexpected type:", type)
-        if not self.model.training:
-            self.model.train()
-        self.datasets[type].add_pair(X, y)
-        self.data_mutex.unlock()
-    
-    def run_epoch(self, epoch: int):
-        losses = {}
-        for type, data_loader in self.data_loaders.values():
-            losses[type] = train_epoch(data_loader, self.model, self.device, self.loss_functions, self.optimizer)
+            all_losses[type] = losses
         
-        training_report(self.tb_writer, epoch, losses)
+        # Report results
+        epoch_report(self.tb_writer, epoch, all_losses, self.datasets)
 
+        # Checkpoint model
         if epoch % 50 == 0:
             torch.save(
                 {
@@ -185,15 +152,87 @@ class ModelElement(QObject):
                     'optimizer_state_dict': self.optimizer.state_dict(),
                 },
                 self.model_path / f"epoch_{epoch:0>6}.pth"
-            )            
+            )
+        return all_losses
 
-    def run_inference(self):
-        # Do inference on the new samples
-        self.new_samples_mutex.lock()
-        if self.inference_queue:
-            with torch.no_grad():
-                all_input = torch.stack(self.inference_queue)
-                predictions = self.model(all_input).cpu().detach().numpy()
-                self.predicted_samples.emit(zip(self.inference_queue, predictions))
-            self.inference_queue = []
-        self.new_samples_mutex.unlock()
+    @pyqtSlot(torch.Tensor)
+    def run_inference(self, input_tensor: torch.Tensor):
+        with torch.no_grad():
+            predictions = self.model(input_tensor).cpu().detach().numpy()
+            self.inference_results.emit(predictions)
+
+
+class ModelController(QThread):
+    inference_request = pyqtSignal(torch.Tensor)
+
+    def __init__(self, model_element: ModelElement):
+        super().__init__()
+        self.model_element = model_element
+        self.inference_queue = [] # TODO: not a queue, better name
+
+        self.mutex = QMutex()
+        self.condition = QWaitCondition()
+        self.wait_train_for_n_samples = 30
+
+    def run(self):
+        self.exec()
+
+    def exec(self):
+        loss_per_epoch = []
+        epoch = 0
+        while True:
+            self.eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
+            self.mutex.lock()
+
+            if len(self.inference_queue) > 0:
+                model_input = torch.stack(self.inference_queue)
+                print("INFERENCE ON", len(model_input), "ELEMENTS")
+                self.inference_request.emit(model_input)
+
+            if self.wait_train_for_n_samples > 0:
+                self.condition.wait(self.mutex)
+                self.mutex.unlock()
+                continue
+
+            if len(loss_per_epoch) > 50:
+                avg_less_recent_loss = np.array(loss_per_epoch[-50:-25]).mean()
+                avg_recent_loss = np.array(loss_per_epoch[-25:]).mean()
+                if avg_less_recent_loss < avg_recent_loss:
+                    # No recent improvements
+                    loss_per_epoch = []
+                    self.wait_train_for_n_samples = int(0.3 * len(self.model_element.datasets["train"]))
+                    print(f"Waiting for {self.wait_train_for_n_samples} training samples ...")
+                    self.condition.wait(self.mutex)
+                    self.mutex.unlock()
+                    continue
+
+            # train
+            if not self.model_element.model.training:
+                self.model_element.model.train()
+            
+            all_losses = self.model_element.run_epoch(epoch)
+            loss_per_epoch.append(all_losses["val"]["criterion"])
+            epoch += 1
+
+            self.mutex.unlock()
+    
+    @pyqtSlot(torch.Tensor)
+    def request_inference(self, X: torch.Tensor):
+        self.mutex.lock()
+        self.inference_queue.append(X)
+        self.condition.wakeAll()
+        self.mutex.unlock()
+
+    @pyqtSlot(torch.Tensor, torch.Tensor, str)
+    def add_training_pair(self, X: torch.Tensor, y: torch.Tensor, type: str):
+        self.mutex.lock()
+        if type not in self.model_element.datasets:
+            raise ValueError("Unexpected type:", type)
+        self.model_element.datasets[type].add_pair(X, y)
+        if type == "train" and self.wait_train_for_n_samples > 0:
+            # print("wait_train_for_n_samples=", self.wait_train_for_n_samples)
+            self.wait_train_for_n_samples -= 1
+            print(self.wait_train_for_n_samples)
+            if self.wait_train_for_n_samples == 0:
+                self.condition.wakeAll()
+        self.mutex.unlock()

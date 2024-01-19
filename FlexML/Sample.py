@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 from pathlib import Path
 import csv
+import ctypes
 import uuid
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
@@ -11,6 +12,7 @@ class Sample():
     def __init__(self, img_path: str, img: np.ndarray, type: str, gt: object):
         self.img_path = img_path
         # TODO
+        self.window_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
         self.saved = img_path is not None
         self._img = img
         self.type = type if type else random.choices(["train", "val", "test"], [0.7, 0.2, 0.1])[0]
@@ -60,10 +62,10 @@ class Sample():
             x, y = None, None
         else:
             x, y = self.gt
-        return [self.img_path, self.type, x, y] + self.get_extra_metadata()
+        return [self.img_path, self.type, *self.window_dims, x, y] + self.get_extra_metadata()
     
     def get_metadata_headers(self) -> list[str]:
-        return ["img_path", "type", "x", "y"] + self.get_extra_metadata_headers()
+        return ["img_path", "type", "win_x", "win_y", "x", "y"] + self.get_extra_metadata_headers()
 
 class SampleMuxer(QObject):
     new_sample = pyqtSignal(Sample)

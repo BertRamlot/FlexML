@@ -3,6 +3,19 @@ import queue
 from PyQt6.QtCore import QThread, QObject, pyqtSignal, pyqtSlot
 
 
+# TODO: support primitives
+class ConstantSource(QThread):
+    new_item = pyqtSignal(object)
+
+    def __init__(self, obj: object):
+        super().__init__()
+        self.obj = obj
+
+    def run(self):
+        while True:
+            self.new_item.emit(self.obj)
+
+
 class BufferThread(QThread):
     new_item = pyqtSignal(object)
 

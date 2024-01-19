@@ -23,7 +23,6 @@ class SourceThread(QThread):
             t0 = time.time()
             success, item = self.get()
             if success:
-                print("EMIT", item)
                 self.new_item.emit(item)
             self.eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
             t1 = time.time()

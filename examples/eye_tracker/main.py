@@ -6,14 +6,13 @@ from PyQt6 import QtWidgets
 
 from FlexML.SourceThread import WebcamSourceThread, DatasetSource
 from FlexML.ModelThread import ModelElement, ModelController
-from FlexML.Sample import SampleMuxer
+from FlexML.Sample import SampleMuxer, DatasetDrain
 from FlexML.Helper import BufferThread, AttributeSelector
-from FlexML.Sample import DatasetDrain
 
 from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
 from examples.eye_tracker.src.TargetSource import SimpleBallSourceThread
 from examples.eye_tracker.src.FaceSample import FaceSampleConvertor
-from examples.eye_tracker.src.FaceNetwork import FaceSampleToTensor, FaceSampleToTrainPair
+from examples.eye_tracker.src.FaceNetwork import FaceSampleToTrainPair
 
 from FlexML.Linker import link_elements
 
@@ -23,10 +22,10 @@ def get_source_worker(uid: str|None):
         return None
     elif uid == "simple-ball":
         # Low timeout to keep GUI stutters to a minimum
-        return SimpleBallSourceThread(1) # 0.02)
+        return SimpleBallSourceThread(0.02)
     elif uid == "webcam":
         # Slight timeout to prevent to many samples that are near equal
-        return WebcamSourceThread(2) # 0.1)
+        return WebcamSourceThread(0.1)
     else:
         raise LookupError("Invalid source worker uid:", uid)
 

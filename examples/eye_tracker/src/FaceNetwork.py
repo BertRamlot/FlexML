@@ -6,7 +6,11 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from examples.eye_tracker.src.FaceSample import FaceSample
 
-def face_sample_to_tensor(sample, device):
+def face_sample_to_y_tensor(sample, device):
+    screen_max_dim = max(sample.get_img()[:2].shape)
+    return torch.tensor(sample.gt).to(device=device) / screen_max_dim
+
+def face_sample_to_X_tensor(sample, device):
     def pre_process_img(img):
         processed_img = cv2.resize(img, (40, 10), interpolation=cv2.INTER_CUBIC)
         processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2GRAY)
@@ -43,8 +47,10 @@ class FaceSampleToTrainPair(QObject):
 
     @pyqtSlot(FaceSample)
     def to_train_pair(self, sample: FaceSample):
-        X = face_sample_to_tensor(sample, self.device)
-        y = torch.empty((0,)) if sample.gt is None else torch.tensor(sample.gt)
+        if sample.gt is None:
+            return
+        X = face_sample_to_X_tensor(sample, self.device)
+        y = face_sample_to_y_tensor(sample, self.device)
         self.output_train_pair.emit(X, y, sample.type)
 
 class FaceSampleToTensor(QObject):
@@ -56,7 +62,7 @@ class FaceSampleToTensor(QObject):
 
     @pyqtSlot(FaceSample)
     def to_tensor(self, sample: FaceSample):
-        X = face_sample_to_tensor(sample, self.device)
+        X = face_sample_to_X_tensor(sample, self.device)
         self.output_tensor.emit(X)
 
 class FaceNetwork(nn.Module):
