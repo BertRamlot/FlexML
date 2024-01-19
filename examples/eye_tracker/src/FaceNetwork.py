@@ -6,6 +6,46 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from examples.eye_tracker.src.FaceSample import FaceSample
 
+def face_sample_to_tensor(sample, device):
+    def pre_process_img(img):
+        processed_img = cv2.resize(img, (40, 10), interpolation=cv2.INTER_CUBIC)
+        processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2GRAY)
+        processed_img = cv2.normalize(processed_img, None, 0, 255, cv2.NORM_MINMAX)
+        return np.asarray(processed_img)
+    left_eye_tensor = torch.from_numpy(pre_process_img(sample.get_eye_im("left"))).float()
+    right_eye_tensor = torch.from_numpy(pre_process_img(sample.get_eye_im("right"))).float()
+    
+    tensor_vals = []
+    tensor_vals.append(left_eye_tensor.flatten()/torch.mean(left_eye_tensor))
+    tensor_vals.append(right_eye_tensor.flatten()/torch.mean(right_eye_tensor))
+    
+    screen_max_dim = max(sample.get_img()[:2].shape)
+    rel_features = sample.features / screen_max_dim
+    face_rel_tl_xy = np.min(sample.features, axis=0) / screen_max_dim
+    face_rel_wh = np.array(sample.get_face_img().shape[:2]) / screen_max_dim
+    eyes_center = sample.features[36:48].mean(axis=0) / screen_max_dim
+
+    tensor_vals.append(torch.Tensor(rel_features).flatten())
+    tensor_vals.append(torch.Tensor(face_rel_tl_xy).flatten())
+    tensor_vals.append(torch.Tensor(face_rel_wh).flatten())
+    tensor_vals.append(torch.Tensor(eyes_center).flatten())
+    
+    X = torch.cat(tensor_vals, dim=0).float().to(device=device)
+    return X
+
+
+class FaceSampleToTrainPair(QObject):
+    output_train_pair = pyqtSignal(torch.Tensor, torch.Tensor, str)
+
+    def __init__(self, device: str):
+        super().__init__(None)
+        self.device = device
+
+    @pyqtSlot(FaceSample)
+    def to_train_pair(self, sample: FaceSample):
+        X = face_sample_to_tensor(sample, self.device)
+        y = torch.empty((0,)) if sample.gt is None else torch.tensor(sample.gt)
+        self.output_train_pair.emit(X, y, sample.type)
 
 class FaceSampleToTensor(QObject):
     output_tensor = pyqtSignal(torch.Tensor)
@@ -15,32 +55,9 @@ class FaceSampleToTensor(QObject):
         self.device = device
 
     @pyqtSlot(FaceSample)
-    def to_tensor(self, sample: FaceSample) -> torch.Tensor:
-        def pre_process_img(img):
-            processed_img = cv2.resize(img, (40, 10), interpolation=cv2.INTER_CUBIC)
-            processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2GRAY)
-            processed_img = cv2.normalize(processed_img, None, 0, 255, cv2.NORM_MINMAX)
-            return np.asarray(processed_img)
-        left_eye_tensor = torch.from_numpy(pre_process_img(sample.get_eye_im("left"))).float()
-        right_eye_tensor = torch.from_numpy(pre_process_img(sample.get_eye_im("right"))).float()
-        
-        tensor_vals = []
-        tensor_vals.append(left_eye_tensor.flatten()/torch.mean(left_eye_tensor))
-        tensor_vals.append(right_eye_tensor.flatten()/torch.mean(right_eye_tensor))
-        
-        screen_max_dim = max(sample.get_img()[:2].shape)
-        rel_features = sample.features / screen_max_dim
-        face_rel_tl_xy = np.min(sample.features, axis=0) / screen_max_dim
-        face_rel_wh = np.array(sample.get_face_img().shape[:2]) / screen_max_dim
-        eyes_center = sample.features[36:48].mean(axis=0) / screen_max_dim
-
-        tensor_vals.append(torch.Tensor(rel_features).flatten())
-        tensor_vals.append(torch.Tensor(face_rel_tl_xy).flatten())
-        tensor_vals.append(torch.Tensor(face_rel_wh).flatten())
-        tensor_vals.append(torch.Tensor(eyes_center).flatten())
-        
-        tensor = torch.cat(tensor_vals, dim=0).float().to(device=self.device)
-        self.output_tensor.emit(tensor)
+    def to_tensor(self, sample: FaceSample):
+        X = face_sample_to_tensor(sample, self.device)
+        self.output_tensor.emit(X)
 
 class FaceNetwork(nn.Module):
     def __init__(self):

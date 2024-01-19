@@ -17,7 +17,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
         self.gt_history = []
         self.inference_history = []
 
-    @QtCore.pyqtSlot(tuple)
+    @QtCore.pyqtSlot(np.ndarray)
     def register_gt_position(self, pos):
         self.gt_history.append(pos)
         if len(self.gt_history) > 5:

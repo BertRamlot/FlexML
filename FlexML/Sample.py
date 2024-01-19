@@ -3,17 +3,18 @@ import cv2
 import numpy as np
 from pathlib import Path
 import csv
+import uuid
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 
 class Sample():
-    def __init__(self, img_path: str, img: np.ndarray, type: str, gt_pos: tuple[float, float]):
+    def __init__(self, img_path: str, img: np.ndarray, type: str, gt: object):
         self.img_path = img_path
         # TODO
         self.saved = img_path is not None
         self._img = img
         self.type = type if type else random.choices(["train", "val", "test"], [0.7, 0.2, 0.1])[0]
-        self.gt_pos = gt_pos
+        self.gt = gt
 
     def get_img(self) -> np.ndarray:
         if self._img is None:
@@ -32,16 +33,7 @@ class Sample():
         images_dir_path = dataset_path / "raw"
         images_dir_path.mkdir(parents=True, exist_ok=True)
         if self.img_path is None:
-            if self.gt_pos is None:
-                x, y = -1, -1
-            else:
-                x, y = self.gt_pos
-            file_name = None
-            i = 0
-            while file_name is None or (images_dir_path / file_name).is_file():
-                file_name = "{}_{}_{}.jpg".format(f"{x:.1f}", f"{y:.1f}", i)
-                i += 1
-            self.img_path = file_name
+            self.img_path = f"{uuid.uuid4()}.jpg"
 
         absolute_img_path = (images_dir_path / self.img_path).absolute()
         cv2.imwrite(str(absolute_img_path), self.get_img(), [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUALITY])
@@ -64,16 +56,15 @@ class Sample():
         return []
 
     def get_metadata(self) -> list:
-        if self.gt_pos is None:
+        if self.gt is None:
             x, y = None, None
         else:
-            x, y = self.gt_pos
+            x, y = self.gt
         return [self.img_path, self.type, x, y] + self.get_extra_metadata()
     
     def get_metadata_headers(self) -> list[str]:
         return ["img_path", "type", "x", "y"] + self.get_extra_metadata_headers()
 
-# SampleMuxer?
 class SampleMuxer(QObject):
     new_sample = pyqtSignal(Sample)
 

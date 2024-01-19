@@ -60,4 +60,3 @@ class FaceSampleConvertor(QObject):
             # features[i, :, :] = face_features
             face_sample = FaceSample(sample, face_features)
             self.face_samples.emit(face_sample)
-        

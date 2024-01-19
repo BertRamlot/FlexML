@@ -36,7 +36,7 @@ class SimpleBallSourceThread(SourceThread):
                 vel_mag = np.linalg.norm(self.ball_vel)
                 self.ball_vel = np.copysign(vel_mag * np.array([np.cos(rnd_angle), np.sin(rnd_angle)]), self.ball_vel)
 
-        return (True, self.ball_pos)
+        return (True, self.ball_pos.astype(np.int32))
     
 class FeedbackBallSourceThread(SourceThread):
     """Ball that is drawn pulled towards areas with few samples and/or high errors."""

@@ -13,7 +13,7 @@ from FlexML.Sample import DatasetDrain
 from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
 from examples.eye_tracker.src.TargetSource import SimpleBallSourceThread
 from examples.eye_tracker.src.FaceSample import FaceSampleConvertor
-from examples.eye_tracker.src.FaceNetwork import FaceSampleToTensor
+from examples.eye_tracker.src.FaceNetwork import FaceSampleToTensor, FaceSampleToTrainPair
 
 from FlexML.Linker import link_elements
 
@@ -23,10 +23,10 @@ def get_source_worker(uid: str|None):
         return None
     elif uid == "simple-ball":
         # Low timeout to keep GUI stutters to a minimum
-        return SimpleBallSourceThread(0.01)
+        return SimpleBallSourceThread(1) # 0.02)
     elif uid == "webcam":
         # Slight timeout to prevent to many samples that are near equal
-        return WebcamSourceThread(0.2)
+        return WebcamSourceThread(2) # 0.1)
     else:
         raise LookupError("Invalid source worker uid:", uid)
 
@@ -55,10 +55,7 @@ if __name__ == "__main__":
 
     # Create model thread
     if args.model:
-        model_controller = ModelController(
-
-        )
-        model = ModelElement(
+        model_element = ModelElement(
             module_directory / Path("models") / args.model,
             args.model_type,
             args.device,
@@ -78,31 +75,32 @@ if __name__ == "__main__":
                 }
             ]
         )
+        model_controller = ModelController(model_element)
+        model_element.moveToThread(model_controller)
     else:
         model_controller = None
-        model = None
+        model_element = None
 
     gt_src_thread = get_source_worker(args.gt_source) 
     img_src_thread = get_source_worker(args.img_source)
-    sample_generator = SampleMuxer()
-    sample_generator.moveToThread(img_src_thread)
+    sample_muxer = SampleMuxer()
+    sample_muxer.moveToThread(img_src_thread)
 
 
     import queue
     sample_buffer = BufferThread(queue.Queue(5))
-    sample_convertor = FaceSampleConvertor(module_directory / "shape_predictor_68_face_landmarks.dat")
-    sample_convertor.moveToThread(sample_buffer)
-    face_sample_to_tensor = FaceSampleToTensor(args.device)
+    sample_to_face_sample = FaceSampleConvertor(module_directory / "shape_predictor_68_face_landmarks.dat")
+    sample_to_face_sample.moveToThread(sample_buffer)
+    face_sample_to_train_pair = FaceSampleToTrainPair(args.device)
 
     dataset_drain = DatasetDrain(module_directory / Path("datasets") / args.save_dataset) if args.save_dataset else None
 
     # Live pipeline
-    link_elements(img_src_thread, ("set_last_img", sample_generator), sample_buffer)
-    link_elements(gt_src_thread, ("set_last_label", sample_generator))
-    link_elements(sample_buffer, sample_convertor, dataset_drain)
-    link_elements(sample_convertor, face_sample_to_tensor, model, overlay)
+    link_elements(img_src_thread, ("set_last_img", sample_muxer), sample_buffer, sample_to_face_sample, dataset_drain)
+    link_elements(gt_src_thread, ("set_last_label", sample_muxer))
+    link_elements(sample_to_face_sample, face_sample_to_train_pair, model_controller, overlay)
+    # link_elements(sample_to_face_sample, AttributeSelector("gt"), model_controller)
     link_elements(gt_src_thread, overlay)
-
 
     if model_controller:
         model_controller.start()
@@ -111,17 +109,18 @@ if __name__ == "__main__":
     if args.load_datasets:
         dataset_sources = [DatasetSource(load_dataset_path) for load_dataset_path in args.load_datasets]
         for dataset_source in dataset_sources:
-            link_elements(dataset_source, sample_convertor)
+            link_elements(dataset_source, sample_to_face_sample)
         for dataset_source in dataset_sources:
             dataset_source.start()
         for dataset_source in dataset_sources:
             dataset_source.wait()
 
     # Start live sources
-    if gt_src_thread:
-        gt_src_thread.start()
     if img_src_thread:
         img_src_thread.start()
-
+    if gt_src_thread:
+        gt_src_thread.start()
+ 
     # Event loop
+    print("Starting GUI loop")
     sys.exit(app.exec())
