@@ -1,27 +1,35 @@
-import time
 import numpy as np
 import cv2
+import time
 import pandas as pd
 from pathlib import Path
-from PyQt6.QtCore import QThread, pyqtSignal
+from PyQt6.QtCore import QThread, pyqtSignal, QEventLoop
 
 from FlexML.Sample import Sample
 
 
 class SourceThread(QThread):
-    new_item = pyqtSignal(np.ndarray)
+    new_item = pyqtSignal(object)
 
     def __init__(self, timeout: float):
         super().__init__(None)
         self.timeout = timeout
 
     def run(self):
+        self.exec()
+
+    def exec(self):
         while not self.is_done():
+            t0 = time.time()
             success, item = self.get()
             if success:
+                print("EMIT", item)
                 self.new_item.emit(item)
-            if self.timeout:
-                time.sleep(self.timeout)
+            self.eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
+            t1 = time.time()
+            sleep_ms = int(1000*(self.timeout - (t1 - t0)))
+            if sleep_ms > 0:
+                self.msleep(sleep_ms)
 
     def get(self) -> tuple[bool, object]:
         raise NotImplementedError()
