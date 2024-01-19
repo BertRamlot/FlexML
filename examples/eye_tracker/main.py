@@ -106,7 +106,7 @@ if __name__ == "__main__":
     
     # Load all data from disk
     if args.load_datasets:
-        dataset_sources = [DatasetSource(load_dataset_path) for load_dataset_path in args.load_datasets]
+        dataset_sources = [DatasetSource(module_directory / "datasets" / load_dataset_path) for load_dataset_path in args.load_datasets]
         for dataset_source in dataset_sources:
             link_elements(dataset_source, sample_to_face_sample)
         for dataset_source in dataset_sources:

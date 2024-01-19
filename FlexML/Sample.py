@@ -9,14 +9,22 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 
 class Sample():
-    def __init__(self, img_path: str, img: np.ndarray, type: str, gt: object):
+    def __init__(self, img_path: str, img: np.ndarray, type: str, gt: object, window_dims = None):
         self.img_path = img_path
         # TODO
-        self.window_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
+        if window_dims is None:
+            self.window_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
+        else:
+            self.window_dims = np.asarray(window_dims)
         self.saved = img_path is not None
         self._img = img
         self.type = type if type else random.choices(["train", "val", "test"], [0.7, 0.2, 0.1])[0]
         self.gt = gt
+
+    @staticmethod
+    def from_metadata(metadata) -> "Sample":
+        img_path, type, win_x, win_y, pos_x, pos_y = metadata[:6]
+        return Sample(img_path, None, type, (pos_x, pos_y), window_dims=(win_x, win_y))
 
     def get_img(self) -> np.ndarray:
         if self._img is None:

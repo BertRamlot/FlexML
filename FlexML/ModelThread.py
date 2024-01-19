@@ -35,7 +35,7 @@ def epoch_report(tb_writer, epoch, losses, datasets):
     criterion_loss_strings = [f"{dataset_type}={losses[dataset_type]['criterion']:.4f}" for dataset_type in dataset_type_order]
 
 
-    print(f"{epoch:6} | samples: {' '.join(dataset_sizes)} ({' '.join(dataset_type_order)}) | losses: {', '.join(criterion_loss_strings)}")
+    print(f"{epoch:6} | samples ({' '.join(dataset_type_order)}): {' '.join(dataset_sizes)} | losses: {', '.join(criterion_loss_strings)}")
 
 
 class DynamicDataset(Dataset):
@@ -230,9 +230,7 @@ class ModelController(QThread):
             raise ValueError("Unexpected type:", type)
         self.model_element.datasets[type].add_pair(X, y)
         if type == "train" and self.wait_train_for_n_samples > 0:
-            # print("wait_train_for_n_samples=", self.wait_train_for_n_samples)
             self.wait_train_for_n_samples -= 1
-            print(self.wait_train_for_n_samples)
             if self.wait_train_for_n_samples == 0:
                 self.condition.wakeAll()
         self.mutex.unlock()

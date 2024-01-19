@@ -14,8 +14,8 @@ class FaceSample(Sample):
     
     @staticmethod
     def from_metadata(metadata) -> "FaceSample":
-        img_path, type, pos_x, pos_y = metadata[:4]
-        return FaceSample(Sample(img_path, None, type, (pos_x, pos_y)), metadata[4:])
+        sample = Sample.from_metadata(metadata[:6])
+        return FaceSample(sample, metadata[6:])
 
     def get_extra_metadata(self) -> list:
         return list(self.features.flatten())
@@ -50,6 +50,7 @@ class FaceSampleConvertor(QObject):
 
     @pyqtSlot(Sample)
     def convert_sample(self, sample: Sample):
+        print("CONVERT")
         img = sample.get_img()        
         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         face_boxes = self.face_detector(gray_img)

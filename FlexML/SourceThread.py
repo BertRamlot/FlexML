@@ -51,16 +51,16 @@ class WebcamSourceThread(SourceThread):
 class DatasetSource(SourceThread):
     def __init__(self, dataset_path: Path):
         super().__init__(0.0)
-        self.metadata_imgs = pd.read_csv(dataset_path / "metadata.csv")
+        self.metadata = pd.read_csv(dataset_path / "metadata.csv")
         self.img_path = dataset_path / "raw"
         self.curr_index = 0
 
     def get(self) -> tuple[bool, Sample]:
-        if self.curr_index >= len(self.metadata_imgs):
+        if self.curr_index >= len(self.metadata):
             return (False, None)
-        sample = Sample.from_metadata(self.metadata_imgs[self.curr_index])
+        sample = Sample.from_metadata(self.metadata.iloc[self.curr_index])
         self.curr_index += 1
         return (True, sample)
 
     def is_done(self) -> bool:
-        return self.curr_index >= len(self.metadata_imgs)
+        return self.curr_index >= len(self.metadata)
