@@ -4,15 +4,15 @@ from pathlib import Path
 from argparse import ArgumentParser
 from PyQt6 import QtWidgets
 
-from FlexML.SourceThread import WebcamSourceThread, DatasetSource
-from FlexML.ModelThread import ModelElement, ModelController
-from FlexML.Sample import SampleMuxer, DatasetDrain
-from FlexML.Helper import BufferThread, AttributeSelector
+from FlexML.SourceThread import WebcamSourceThread
+from FlexML.Model import ModelElement, ModelController
+from FlexML.Helper import BufferThread
 
 from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
 from examples.eye_tracker.src.TargetSource import SimpleBallSourceThread
-from examples.eye_tracker.src.FaceSample import FaceSampleConvertor
+from examples.eye_tracker.src.FaceSample import GazeToFaceSampleConvertor
 from examples.eye_tracker.src.FaceNetwork import FaceSampleToTrainPair
+from examples.eye_tracker.src.GazeSample import GazeSampleMuxer, GazeSampleCollection
 
 from FlexML.Linker import link_elements
 
@@ -82,23 +82,22 @@ if __name__ == "__main__":
 
     gt_src_thread = get_source_worker(args.gt_source) 
     img_src_thread = get_source_worker(args.img_source)
-    sample_muxer = SampleMuxer()
+    sample_muxer = GazeSampleMuxer()
     sample_muxer.moveToThread(img_src_thread)
 
 
     import queue
     sample_buffer = BufferThread(queue.Queue(5))
-    sample_to_face_sample = FaceSampleConvertor(module_directory / "shape_predictor_68_face_landmarks.dat")
-    sample_to_face_sample.moveToThread(sample_buffer)
+    gaze_to_face_sample = GazeToFaceSampleConvertor(module_directory / "shape_predictor_68_face_landmarks.dat")
+    gaze_to_face_sample.moveToThread(sample_buffer)
     face_sample_to_train_pair = FaceSampleToTrainPair(args.device)
 
-    dataset_drain = DatasetDrain(module_directory / Path("datasets") / args.save_dataset) if args.save_dataset else None
+    save_data_coll = GazeSampleCollection(module_directory / Path("datasets") / args.save_dataset) if args.save_dataset else None
 
     # Live pipeline
-    link_elements(img_src_thread, ("set_last_img", sample_muxer), sample_buffer, sample_to_face_sample, dataset_drain)
-    link_elements(gt_src_thread, ("set_last_label", sample_muxer))
-    link_elements(sample_to_face_sample, face_sample_to_train_pair, model_controller, overlay)
-    # link_elements(sample_to_face_sample, AttributeSelector("gt"), model_controller)
+    link_elements(gt_src_thread,  ("set_last_label", sample_muxer), save_data_coll)
+    link_elements(img_src_thread, ("set_last_img",   sample_muxer), sample_buffer, gaze_to_face_sample)
+    link_elements(gaze_to_face_sample, face_sample_to_train_pair, model_controller, overlay)
     link_elements(gt_src_thread, overlay)
 
     if model_controller:
@@ -106,13 +105,11 @@ if __name__ == "__main__":
     
     # Load all data from disk
     if args.load_datasets:
-        dataset_sources = [DatasetSource(module_directory / "datasets" / load_dataset_path) for load_dataset_path in args.load_datasets]
-        for dataset_source in dataset_sources:
-            link_elements(dataset_source, sample_to_face_sample)
-        for dataset_source in dataset_sources:
-            dataset_source.start()
-        for dataset_source in dataset_sources:
-            dataset_source.wait()
+        load_data_colls = [GazeSampleCollection(module_directory / "datasets" / load_dataset_path) for load_dataset_path in args.load_datasets]
+        for dataset_source in load_data_colls:
+            link_elements(dataset_source, gaze_to_face_sample)
+        for dataset_source in load_data_colls:
+            dataset_source.publish_all_samples()
 
     # Start live sources
     if img_src_thread:

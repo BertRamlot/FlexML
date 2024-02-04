@@ -1,15 +1,12 @@
 import numpy as np
 import cv2
 import time
-import pandas as pd
 from pathlib import Path
 from PyQt6.QtCore import QThread, pyqtSignal, QEventLoop
 
-from FlexML.Sample import Sample
-
 
 class SourceThread(QThread):
-    new_item = pyqtSignal(object)
+    new_object = pyqtSignal(object)
 
     def __init__(self, timeout: float):
         super().__init__(None)
@@ -23,7 +20,7 @@ class SourceThread(QThread):
             t0 = time.time()
             success, item = self.get()
             if success:
-                self.new_item.emit(item)
+                self.new_object.emit(item)
             self.eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
             t1 = time.time()
             sleep_ms = int(1000*(self.timeout - (t1 - t0)))
@@ -39,8 +36,9 @@ class SourceThread(QThread):
 class WebcamSourceThread(SourceThread):
     def __init__(self, timeout: int, index: int = 0):
         super().__init__(timeout)
-        print(f"Starting camera {index}... (this can take a while, I don't know why)")
+        print(f"Starting webcam capture (index={index}) ...", end='')
         self.cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
+        print(" done")
 
     def __del__(self):
         self.cap.release()
@@ -48,19 +46,17 @@ class WebcamSourceThread(SourceThread):
     def get(self) -> tuple[bool, np.ndarray]:
         return self.cap.read()
 
-class DatasetSource(SourceThread):
-    def __init__(self, dataset_path: Path):
-        super().__init__(0.0)
-        self.metadata = pd.read_csv(dataset_path / "metadata.csv")
-        self.img_path = dataset_path / "raw"
-        self.curr_index = 0
+class VideoFileSourceThread(SourceThread):
+    def __init__(self, timeout: int, path: Path):
+        super().__init__(timeout)
+        self.cap = cv2.VideoCapture(str(path))
 
-    def get(self) -> tuple[bool, Sample]:
-        if self.curr_index >= len(self.metadata):
-            return (False, None)
-        sample = Sample.from_metadata(self.metadata.iloc[self.curr_index])
-        self.curr_index += 1
-        return (True, sample)
+    def __del__(self):
+        self.cap.release()
 
-    def is_done(self) -> bool:
-        return self.curr_index >= len(self.metadata)
+    def get(self) -> tuple[bool, np.ndarray]:
+        return self.cap.read()
+
+# Screen capture
+# Window capture
+    

@@ -1,6 +1,6 @@
 import queue
 
-from PyQt6.QtCore import QThread, QObject, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QThread, QObject, QEventLoop, pyqtSignal, pyqtSlot
 
 
 # TODO: support primitives
@@ -32,10 +32,14 @@ class BufferThread(QThread):
             pass
 
     def run(self):
+        self.exec()
+
+    def exec(self):
         while True:
             item = self._queue.get()
             self.new_item.emit(item)
             self._queue.task_done()
+            self.eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
 
 class AttributeSelector(QObject):
     output_attribute = pyqtSignal(object)
@@ -45,21 +49,29 @@ class AttributeSelector(QObject):
         self.call_if_callable = call_if_callable
 
     @pyqtSlot(object)
-    def input_objec(self, object: object):
+    def input_object(self, object: object):
         attr = getattr(object, self.attribute_name)
         if self.call_if_callable and callable(attr):
             attr = attr()
         self.output_attribute.emit(attr)
 
-class Muxer(QObject):
+class Convertor(QObject):
     output = pyqtSignal(object)
 
-    def __init__(self):
+    def __init__(self, function) -> None:
         super().__init__()
+        self.function = function
+    
+    def on_input(self, object: object):
+        self.output.emit(self.function(object))
 
-class Demuxer(QObject):
-    output = pyqtSignal()
-
-    def __init__(self):
+class Filter(QObject):
+    output = pyqtSignal(object)
+    
+    def __init__(self, predicate) -> None:
         super().__init__()
-
+        self.predicate = predicate
+    
+    def on_input(self, object: object):
+        if self.predicate(object):
+            self.output.emit(object)
