@@ -1,13 +1,14 @@
 import sys
-import os
+import signal
 from pathlib import Path
 from argparse import ArgumentParser
-from PyQt6 import QtWidgets
-from PyQt6.QtCore import QThread
+from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import QCoreApplication, QEventLoop
 
 from FlexML.SourceThread import WebcamSourceThread
 from FlexML.Model import ModelElement, ModelController
 from FlexML.Helper import BufferThread, Filter
+from FlexML.Linker import link_elements
 
 from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
 from examples.eye_tracker.src.TargetSource import SimpleBallSourceThread
@@ -15,8 +16,6 @@ from examples.eye_tracker.src.FaceSample import GazeToFaceSampleConvertor
 from examples.eye_tracker.src.FaceNetwork import FaceSampleToTrainPair
 from examples.eye_tracker.src.GazeSample import GazeSampleMuxer, GazeSampleCollection
 from examples.eye_tracker.src.FaceSample import FaceSampleCollection
-
-from FlexML.Linker import link_elements
 
 
 def get_source_worker(uid: str|None):
@@ -45,11 +44,13 @@ if __name__ == "__main__":
 
     module_directory = Path(__file__).resolve().parent
 
-
-    app = QtWidgets.QApplication(sys.argv)
-
-    # Create overlay
-    overlay = EyeTrackingOverlay()
+    # TODO: proper
+    if args.gt_source or args.img_source:
+        app = QApplication(sys.argv)
+        overlay = EyeTrackingOverlay()
+    else:
+        app = QCoreApplication(sys.argv)
+        overlay = None
 
     # Create model thread
     if args.model:
@@ -134,5 +135,19 @@ if __name__ == "__main__":
         gt_src_thread.start()
  
     # Event loop
-    print("Starting GUI loop")
-    sys.exit(app.exec())
+    print("Starting application event loop")
+    if overlay:
+        sys.exit(app.exec())
+    else:
+        # TODO: this is a hack to avoid calling "app.exec()" which prevents you from interupting (w/ "CTRL+C") when there is no GUI.
+        # There is probably a better way to do this.
+        global quiting
+        quiting = False
+        def quit_application(_1, _2):
+            global quiting
+            quiting = True
+        signal.signal(signal.SIGINT, quit_application)
+        import time
+        while not quiting:
+            app.thread().eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
+            time.sleep(0.01)
