@@ -109,19 +109,21 @@ if __name__ == "__main__":
             filt, 
             save_coll
         )
-
-    if model_controller:
-        model_controller.start()
     
     # Load all data from disk
     if args.load_datasets:
+        total_published_samples = 0
         load_data_colls = [FaceSampleCollection(module_directory / "datasets" / load_dataset_path) for load_dataset_path in args.load_datasets]
         for dataset_source in load_data_colls:
             link_elements(dataset_source, face_sample_to_train_pair)
         for dataset_source in load_data_colls:
-            dataset_source.publish_all_samples()
+            total_published_samples += dataset_source.publish_all_samples()
+        print(f"Loaded {total_published_samples} samples.")
 
         # TODO: wait for all samples to be processes before starting the live threads?
+    
+    if model_controller:
+        model_controller.start()
 
     # Start live sources
     if img_src_thread:

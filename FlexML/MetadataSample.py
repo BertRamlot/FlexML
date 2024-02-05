@@ -24,11 +24,14 @@ class MetadataSampleCollection(SampleCollection):
     def get_metadata_headers(self) -> list[str]:
         raise NotImplementedError()
     
-    def publish_all_samples(self):
+    def publish_all_samples(self) -> int:
+        published_samples = 0
         self.all_metadata = pd.read_csv(self.dataset_path / "metadata.csv")
         for i in range(len(self.all_metadata)):
             sample = self.from_metadata(self.all_metadata.iloc[i])
             self.new_sample.emit(sample)
+            published_samples += 1
+        return published_samples
     
     @pyqtSlot(MetadataSample)
     def add_sample(self, sample: MetadataSample):

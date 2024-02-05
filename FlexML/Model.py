@@ -114,7 +114,7 @@ class ModelElement(QObject):
             self.data_loaders[t] = data_loader
 
     @pyqtSlot(int)
-    def run_epoch(self, epoch: int) -> dict:
+    def run_epoch(self) -> dict:
         # Train/Val/Test epoch
         all_losses = {}
         for type, data_loader in self.data_loaders.items():
@@ -141,19 +141,20 @@ class ModelElement(QObject):
             all_losses[type] = losses
         
         # Report results
-        epoch_report(self.tb_writer, epoch, all_losses, self.datasets)
+        epoch_report(self.tb_writer, self.epoch, all_losses, self.datasets)
 
         # Checkpoint model
-        if epoch % 50 == 0:
+        if self.epoch % 50 == 0:
             torch.save(
                 {
                     'model_type': self.model_type,
-                    'epoch': epoch,
+                    'epoch': self.epoch,
                     'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
                 },
-                self.model_path / f"epoch_{epoch:0>6}.pth"
+                self.model_path / f"epoch_{self.epoch:0>6}.pth"
             )
+        self.epoch += 1
         return all_losses
 
     @pyqtSlot(torch.Tensor)
@@ -174,18 +175,17 @@ class ModelController(QThread):
         self.new_samples = []
 
         # TODO: Make sure the dataset has atleast N ele per
-        self.wait_train_for_n_samples = 50
+        self.wait_train_for_n_samples = 100
 
         self.mutex = QMutex()
         self.condition = QWaitCondition()
 
     def run(self):
         loss_per_epoch = []
-        epoch = 0
         while True:
             inference_items = []
             self.mutex.lock()
-            while not self.inference_queue and not self.new_samples:
+            while not self.inference_queue and not self.new_samples and self.wait_train_for_n_samples:
                 self.condition.wait(self.mutex)        
             inference_items, self.inference_queue = self.inference_queue, []
             new_samples, self.new_samples = self.new_samples, []
@@ -196,7 +196,6 @@ class ModelController(QThread):
                 self.model_element.datasets[type].add_pair(X, y)
                 if type == "train":
                     self.wait_train_for_n_samples = max(0, self.wait_train_for_n_samples -1)
-            
             if self.wait_train_for_n_samples > 0:
                 continue
 
@@ -220,9 +219,8 @@ class ModelController(QThread):
             if not self.model_element.model.training:
                 self.model_element.model.train()
             
-            all_losses = self.model_element.run_epoch(epoch)
+            all_losses = self.model_element.run_epoch()
             loss_per_epoch.append(all_losses["val"]["criterion"])
-            epoch += 1
     
     @pyqtSlot(torch.Tensor)
     def request_inference(self, X: torch.Tensor):
@@ -234,7 +232,6 @@ class ModelController(QThread):
 
     @pyqtSlot(torch.Tensor, torch.Tensor, str)
     def add_training_pair(self, X: torch.Tensor, y: torch.Tensor, type: str):
-        # print("NEW TRAIN PAIR", self.wait_train_for_n_samples)
         if type not in self.model_element.datasets:
             raise ValueError("Unexpected type:", type)
 
