@@ -27,12 +27,9 @@ def get_source_worker(uid: str|None):
         return SimpleBallSourceThread(0.02)
     elif uid == "webcam":
         # Slight timeout to prevent to many samples that are near equal
-        return WebcamSourceThread(0.1)
+        return WebcamSourceThread(1)
     else:
         raise LookupError("Invalid source worker uid:", uid)
-
-def get_network(uid: str):
-    pass
 
 
 if __name__ == "__main__":
@@ -85,7 +82,7 @@ if __name__ == "__main__":
     gt_src_thread = get_source_worker(args.gt_source) 
     img_src_thread = get_source_worker(args.img_source)
     sample_muxer = GazeSampleMuxer()
-    sample_muxer.moveToThread(img_src_thread)
+    # sample_muxer.moveToThread(img_src_thread)
 
 
     import queue
@@ -102,6 +99,8 @@ if __name__ == "__main__":
 
     # Save data to disk
     if args.save_dataset:
+        save_path = module_directory / Path("datasets") / args.save_dataset
+        print(f"Saving new samples in: {save_path}")
         filt = Filter(lambda s: s.gt is not None)
         save_coll = FaceSampleCollection(module_directory / Path("datasets") / args.save_dataset)
         link_elements(
@@ -109,6 +108,8 @@ if __name__ == "__main__":
             filt, 
             save_coll
         )
+    else:
+        print("Not saving new samples")
     
     # Load all data from disk
     if args.load_datasets:
@@ -119,8 +120,9 @@ if __name__ == "__main__":
         for dataset_source in load_data_colls:
             total_published_samples += dataset_source.publish_all_samples()
         print(f"Loaded {total_published_samples} samples.")
-
         # TODO: wait for all samples to be processes before starting the live threads?
+    else:
+        print("Not loading any datasets")
     
     if model_controller:
         model_controller.start()

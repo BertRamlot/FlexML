@@ -5,7 +5,7 @@ from PyQt6 import QtGui, QtWidgets, QtCore
 
 class EyeTrackingOverlay(QtWidgets.QMainWindow):
     def __init__(self):
-        super().__init__(None, QtCore.Qt.WindowType.WindowStaysOnTopHint)
+        super().__init__(flags=QtCore.Qt.WindowType.WindowStaysOnTopHint)
 
         self.window_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
         self.setGeometry(0, 0, *self.window_dims)

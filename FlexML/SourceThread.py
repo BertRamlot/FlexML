@@ -21,7 +21,9 @@ class SourceThread(QThread):
             success, item = self.get()
             if success:
                 self.new_object.emit(item)
-            self.eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
+            # TODO: normally source threads don't receive events (unless followup obj are living on its thread)
+            # do we need event loop?
+            # self.eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
             t1 = time.time()
             sleep_ms = int(1000*(self.timeout - (t1 - t0)))
             if sleep_ms > 0:
