@@ -83,7 +83,7 @@ class ModelElement(QObject):
         
         # TODO: use 'self.model_type'
         model = FaceNetwork().to(self.device)
-        self.optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+        self.optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
         model.eval()
 
@@ -175,7 +175,7 @@ class ModelController(QThread):
         self.new_samples = []
 
         # TODO: Make sure the dataset has atleast N ele per
-        self.wait_train_for_n_samples = 100
+        self.wait_train_for_n_samples = 50
 
         self.mutex = QMutex()
         self.condition = QWaitCondition()

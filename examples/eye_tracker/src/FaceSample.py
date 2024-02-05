@@ -30,8 +30,15 @@ class FaceSample(GazeSample):
         else:
             raise RuntimeError("Invalid eye_type:", eye_type)
         
-        min_x, min_y = self.features[idx:idx+6].min(axis=0)
-        max_x, max_y = self.features[idx:idx+6].max(axis=0)
+        # This is another way (different results)
+        # min_x, min_y = self.features[idx:idx+6].min(axis=0) # - 5
+        # max_x, max_y = self.features[idx:idx+6].max(axis=0) # + 5
+
+        center = self.features[idx:idx+6].mean(axis=0)
+
+        min_x, min_y = np.round(center - np.array([20, 8])).astype(np.int32)
+        max_x, max_y = np.round(center + np.array([20, 8])).astype(np.int32)
+        
         return self.get_img()[min_y:max_y, min_x:max_x]
 
 class FaceSampleCollection(GazeSampleCollection):
