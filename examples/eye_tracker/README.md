@@ -49,10 +49,10 @@ graph TD;
     gt_src-->overlay
     sample_muxer-->gaze_to_face_convertor
     gaze_to_face_convertor-->to_train_sample
-    sample_muxer-->save_sample_coll
+    gaze_to_face_convertor-->save_sample_coll
     save_sample_coll-->disk_output
     disk_input-->load_sample_coll
-    load_sample_coll-->gaze_to_face_convertor
+    load_sample_coll-->to_train_sample
     to_train_sample-->model_cntrl
     model_cntrl-->model_ele
     model_cntrl-->|loss per sample|explor_exploit

@@ -42,7 +42,7 @@ class FaceSampleToTrainPair(QObject):
     output_train_pair = pyqtSignal(torch.Tensor, torch.Tensor, str)
 
     def __init__(self, device: str):
-        super().__init__(None)
+        super().__init__()
         self.device = device
 
     @pyqtSlot(FaceSample)

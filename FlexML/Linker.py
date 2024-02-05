@@ -84,11 +84,13 @@ def link_elements(*elements):
                     continue
                 if all(signal_param_types[i] == slot_param_types[i] for i in range(len(signal_param_types))):
                     matching_slots.append(slot_method)
+            # Duplicates can exist due to overriding a slot in a base-class with a slot
+            matching_slots = list(dict.fromkeys(matching_slots))
             if len(matching_slots) == 0:
                 print(f"Failed to link (no match) {send_obj} and {rcv_obj}")
                 continue
             elif len(matching_slots) > 1:
-                print("WARNING: multiple valid signal/slot combinations found!")
+                print(f"WARNING: multiple valid signal/slot combinations found for {send_obj} and {rcv_obj}")
             # print("Conncection:")
             # print(f"- '{signal_method}'")
             # print(f"- '{matching_slots[0]}'")

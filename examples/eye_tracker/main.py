@@ -3,16 +3,18 @@ import os
 from pathlib import Path
 from argparse import ArgumentParser
 from PyQt6 import QtWidgets
+from PyQt6.QtCore import QThread
 
 from FlexML.SourceThread import WebcamSourceThread
 from FlexML.Model import ModelElement, ModelController
-from FlexML.Helper import BufferThread
+from FlexML.Helper import BufferThread, Filter
 
 from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
 from examples.eye_tracker.src.TargetSource import SimpleBallSourceThread
 from examples.eye_tracker.src.FaceSample import GazeToFaceSampleConvertor
 from examples.eye_tracker.src.FaceNetwork import FaceSampleToTrainPair
 from examples.eye_tracker.src.GazeSample import GazeSampleMuxer, GazeSampleCollection
+from examples.eye_tracker.src.FaceSample import FaceSampleCollection
 
 from FlexML.Linker import link_elements
 
@@ -92,24 +94,34 @@ if __name__ == "__main__":
     gaze_to_face_sample.moveToThread(sample_buffer)
     face_sample_to_train_pair = FaceSampleToTrainPair(args.device)
 
-    save_data_coll = GazeSampleCollection(module_directory / Path("datasets") / args.save_dataset) if args.save_dataset else None
-
     # Live pipeline
-    link_elements(gt_src_thread,  ("set_last_label", sample_muxer), save_data_coll)
+    link_elements(gt_src_thread,  ("set_last_label", sample_muxer))
     link_elements(img_src_thread, ("set_last_img",   sample_muxer), sample_buffer, gaze_to_face_sample)
     link_elements(gaze_to_face_sample, face_sample_to_train_pair, model_controller, overlay)
     link_elements(gt_src_thread, overlay)
+
+    # Save data to disk
+    if args.save_dataset:
+        filt = Filter(lambda s: s.gt is not None)
+        save_coll = FaceSampleCollection(module_directory / Path("datasets") / args.save_dataset)
+        link_elements(
+            gaze_to_face_sample, 
+            filt, 
+            save_coll
+        )
 
     if model_controller:
         model_controller.start()
     
     # Load all data from disk
     if args.load_datasets:
-        load_data_colls = [GazeSampleCollection(module_directory / "datasets" / load_dataset_path) for load_dataset_path in args.load_datasets]
+        load_data_colls = [FaceSampleCollection(module_directory / "datasets" / load_dataset_path) for load_dataset_path in args.load_datasets]
         for dataset_source in load_data_colls:
-            link_elements(dataset_source, gaze_to_face_sample)
+            link_elements(dataset_source, face_sample_to_train_pair)
         for dataset_source in load_data_colls:
             dataset_source.publish_all_samples()
+
+        # TODO: wait for all samples to be processes before starting the live threads?
 
     # Start live sources
     if img_src_thread:

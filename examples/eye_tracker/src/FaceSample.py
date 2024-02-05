@@ -35,12 +35,12 @@ class FaceSample(GazeSample):
         return self.get_img()[min_y:max_y, min_x:max_x]
 
 class FaceSampleCollection(GazeSampleCollection):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, path: Path):
+        super().__init__(path)
 
     def from_metadata(self, metadata) -> FaceSample:
         gaze_sample = super().from_metadata(metadata)
-        return FaceSample(gaze_sample, metadata[6:])
+        return FaceSample(gaze_sample, np.asarray(metadata[6:], dtype=np.int32).reshape(-1, 2))
 
     def get_metadata_headers(self) -> list[str]:
         extra_headers = [f"fx_{i}" for i in range(68)] + [f"fy_{i}" for i in range(68)]

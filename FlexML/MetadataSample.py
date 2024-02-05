@@ -1,6 +1,7 @@
 import pandas as pd
 import csv
 from pathlib import Path
+from PyQt6.QtCore import pyqtSlot
 
 from FlexML.Sample import Sample, SampleCollection
 
@@ -29,6 +30,7 @@ class MetadataSampleCollection(SampleCollection):
             sample = self.from_metadata(self.all_metadata.iloc[i])
             self.new_sample.emit(sample)
     
+    @pyqtSlot(MetadataSample)
     def add_sample(self, sample: MetadataSample):
         metadata_path = self.dataset_path / "metadata.csv"
         file_exists = metadata_path.is_file()
@@ -36,6 +38,5 @@ class MetadataSampleCollection(SampleCollection):
             writer = csv.writer(f)
             if not file_exists:
                 writer.writerow(self.get_metadata_headers())
-            writer.writerow(sample.get_metadata())
-    
+            writer.writerow(sample.get_metadata())   
         self.new_sample.emit(sample)

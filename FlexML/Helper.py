@@ -68,10 +68,11 @@ class Convertor(QObject):
 class Filter(QObject):
     output = pyqtSignal(object)
     
-    def __init__(self, predicate) -> None:
+    def __init__(self, predicate):
         super().__init__()
         self.predicate = predicate
     
-    def on_input(self, object: object):
+    @pyqtSlot(object)
+    def on_input(self, object):
         if self.predicate(object):
             self.output.emit(object)

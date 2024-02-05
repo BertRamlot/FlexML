@@ -29,7 +29,7 @@ class GazeSample(MetadataSample):
         return self._img
     
     def get_metadata(self) -> list:
-        x, y = self.gt
+        x, y = (None, None) if self.gt is None else self.gt
         return [self.img_path.name, self.type, *self.window_dims, x, y]
     
 
@@ -44,21 +44,23 @@ class GazeSampleCollection(MetadataSampleCollection):
         return GazeSample(img_path, None, type, (pos_x, pos_y), window_dims=(win_x, win_y))
     
     def get_metadata_headers(self) -> list[str]:
-        return ["type", "img_name", "win_x", "win_y", "x", "y"] + self.get_extra_metadata_headers()
+        return ["type", "img_name", "win_x", "win_y", "x", "y"]
 
-    def save_sample(self, sample: GazeSample, jpeg_quality: int = 50):
-
+    @pyqtSlot(MetadataSample)
+    def add_sample(self, sample: MetadataSample):
         images_dir_path = self.dataset_path / "raw"
         images_dir_path.mkdir(parents=True, exist_ok=True)
-        if self.img_path is None:
-            self.img_path = f"{uuid.uuid4()}.jpg"
+        if sample.img_path is None:
+            sample.img_path = images_dir_path / f"{uuid.uuid4()}.jpg"
 
+        jpeg_quality: int = 50
         cv2.imwrite(
-            str((images_dir_path / self.img_path).absolute()),
+            str(sample.img_path),
             sample.get_img(),
             [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality]
         )
 
+        super().add_sample(sample)
 
 class GazeSampleMuxer(QObject):
     new_sample = pyqtSignal(GazeSample)
