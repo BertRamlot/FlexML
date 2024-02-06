@@ -75,5 +75,5 @@ class Filter(QObject):
     
     @pyqtSlot(object)
     def on_input(self, object):
-        if self.predicate(object):
+        if self.predicate(self, object):
             self.output.emit(object)

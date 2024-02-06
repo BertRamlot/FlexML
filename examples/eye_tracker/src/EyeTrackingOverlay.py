@@ -27,9 +27,11 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
     @QtCore.pyqtSlot(np.ndarray)
     def register_inference_positions(self, positions: np.ndarray):
         for pos in positions:
+            # Put out of bound coordinates to the edge of the screen. This is not done in the training loop
+            pos = np.clip(pos, 0.0, 1.0)
             self.inference_history.append((pos * self.window_dims.max()).round().astype(np.int32))
-            if len(self.inference_history) > 10:
-                self.inference_history = self.inference_history[-10:]
+            if len(self.inference_history) > 3:
+                self.inference_history = self.inference_history[-3:]
         self.update()
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:

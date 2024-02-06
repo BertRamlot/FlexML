@@ -11,16 +11,31 @@ Features:
 
 ## Results
 
-Setup:
+Loss function is the euclidean distance between the ground truth and the predicted values (without clamping to the edges of the screen).
+Distance is measured as a percentage of the width of the screen.
+Your can vary greatly depending on your setup, a reasonable best and worst case is discussed
 
-- 15.6 inch laptop screen
-- ~25 inch viewing distance
-- 0 starting training samples
-- x seconds of tracking the ball
+### Setup 1 (best-case)
+
+- FOV: ~53 degrees (distance to screen = screen width)
+- No glasses, even lighting
+- No head movement (both rotationally and laterally)
 
 Results:
 
-- average euclidean distance error of ~6% of the width of the screen, corresponds to approximately 0.8 inches (2 cm)
+- Test loss: ~X% , corresponds  ()
+
+
+### Setup 2 (worst-case)
+
+- FOV: ~28 degrees (distance to screen = 2 * screen width)
+- Glasses with substantial reflections, uneven ligthing
+- Substantial head movement (both rotationally and laterally)
+
+Results:
+
+- Test loss: ~X%
+
 
 ## Usage
 
@@ -28,35 +43,45 @@ Results:
 python3 -m examples.eye_tracker.main --load_dataset my_dataset --save_dataset my_dataset --img_source webcam --gt_source simple-ball --model myModel
 ```
 
+## Architecture
+
 ```mermaid
 graph TD;
     img_src[Webcam Source]
     gt_src[Feedback Ball Source]
     sample_muxer[Sample Muxer]
     model_cntrl[Model Controller]
-    model_ele[Model]
+    subgraph model_thread["Model Thread"]
+        model_ele[Model]
+    end
     load_sample_coll[Load Sample Collection]
     save_sample_coll[Save Sample Collection]
-    gaze_to_face_convertor[Face Detector]
+    subgraph face_detector_thread["Face detector Thread"]
+        gaze_to_face_convertor[Face Detector]
+    end
     overlay[Overlay]
-    to_train_sample[To Tensor]
+    as_train_sample[To tensor &#40train/val/test&#41]
+    as_inference_sample[To tensor &#40inference&#41]
     explor_exploit[Exploitation/Exploratioon\nController]
     disk_input[(Disk)]
     disk_output[(Disk)]
+    sample_filter(More than 1 second passed since last save?\nAND\nDoes sample have ground truth &#40i.e. 'y'&#41?)
 
     img_src-->|image|sample_muxer
-    gt_src-->sample_muxer
-    gt_src-->overlay
-    sample_muxer-->gaze_to_face_convertor
-    gaze_to_face_convertor-->to_train_sample
-    gaze_to_face_convertor-->save_sample_coll
-    save_sample_coll-->disk_output
-    disk_input-->load_sample_coll
-    load_sample_coll-->to_train_sample
-    to_train_sample-->model_cntrl
-    model_cntrl-->model_ele
+    gt_src-->|ball position|sample_muxer
+    gt_src-->|ball position|overlay
+    sample_muxer-->|gaze sample|gaze_to_face_convertor
+    gaze_to_face_convertor-->|face sample|sample_filter
+    sample_filter-.->|&#60if yes&#62: face sample|save_sample_coll
+    sample_filter-.->|&#60if yes&#62: face sample|as_train_sample
+    gaze_to_face_convertor-->|face sample|as_inference_sample
+    save_sample_coll-->|csv & images|disk_output
+    disk_input-->|csv & images|load_sample_coll
+    load_sample_coll-->|face sample|as_train_sample
+    as_train_sample-->|&#40X, y, type&#41|model_cntrl
+    as_inference_sample-->|&#40X,&#41|model_cntrl
+    model_cntrl<-->model_ele
     model_cntrl-->|loss per sample|explor_exploit
     explor_exploit-->gt_src
-    model_ele-->model_cntrl
-    model_cntrl-->|inference & val predictions|overlay
+    model_ele-->|predicted values inference|overlay
 ```

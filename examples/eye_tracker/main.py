@@ -93,14 +93,32 @@ if __name__ == "__main__":
     gaze_to_face_sample = GazeToFaceSampleConvertor(module_directory / "shape_predictor_68_face_landmarks.dat")
     gaze_to_face_sample.moveToThread(sample_buffer)
     face_sample_to_train_pair = FaceSampleToTrainPair(args.device)
+    # Enfore some time between samples to prevent:
+    # (1) leakage btwn train/val/test datasets
+    # (2) too similar samples within a dataset
+    import time
+    def new_train_samples_filter_func(filtr, sample):
+        if sample.gt is None:
+            return False
+        if hasattr(filtr, "last_pass_time"):
+            elapsed_since_last_pass = time.time() - filtr.last_pass_time
+        else:
+            elapsed_since_last_pass = None
+        if elapsed_since_last_pass is None or elapsed_since_last_pass > 0.5:
+            filtr.last_pass_time = time.time()
+            return True
+        return False
+    new_train_samples = Filter(new_train_samples_filter_func)
+    link_elements(gaze_to_face_sample, new_train_samples)
 
     # Live pipeline
     link_elements(gt_src_thread,  ("set_last_label", sample_muxer))
     link_elements(img_src_thread, ("set_last_img",   sample_muxer), sample_buffer, gaze_to_face_sample)
-    if args.train:
-        link_elements(gaze_to_face_sample, face_sample_to_train_pair, model_controller)
     link_elements(model_controller, model_element, ("register_inference_positions", overlay))
     link_elements(gt_src_thread, ("register_gt_position", overlay))
+
+    if args.train:
+        link_elements(new_train_samples, face_sample_to_train_pair, model_controller)
 
     if args.inference:
         inference_convertor = Convertor(lambda s: face_sample_to_X_tensor(s, args.device))
@@ -110,13 +128,8 @@ if __name__ == "__main__":
     if args.save_dataset:
         save_path = module_directory / Path("datasets") / args.save_dataset
         print(f"Saving new samples in: {save_path}")
-        filt = Filter(lambda s: s.gt is not None)
         save_coll = FaceSampleCollection(module_directory / Path("datasets") / args.save_dataset)
-        link_elements(
-            gaze_to_face_sample, 
-            filt, 
-            save_coll
-        )
+        link_elements( new_train_samples, save_coll)
     else:
         print("Not saving new samples")
     
