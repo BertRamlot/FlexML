@@ -62,6 +62,7 @@ class Convertor(QObject):
         super().__init__()
         self.function = function
     
+    @pyqtSlot(object)
     def on_input(self, object: object):
         self.output.emit(self.function(object))
 

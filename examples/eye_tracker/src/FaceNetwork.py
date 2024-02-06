@@ -110,4 +110,4 @@ class FaceNetwork(nn.Module):
             main_input.append(x[:,-self.metadata_size:])
         main_input = torch.cat(main_input, 1)
         output = self.main_stack(main_input)
-        return torch.clamp(output, min=0.0, max=1.0)
+        return output # torch.clamp(output, min=0.0, max=1.0)

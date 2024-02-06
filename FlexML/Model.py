@@ -58,7 +58,7 @@ class DynamicDataset(Dataset):
 class ModelElement(QObject):
     """Manages the pytorch model."""
 
-    inference_results = pyqtSignal(tuple)
+    inference_results = pyqtSignal(np.ndarray)
 
     def __init__(self, model_path: str, model_type: str, device: str, dataset_configs: list):
         super().__init__()
@@ -191,6 +191,11 @@ class ModelController(QThread):
             new_samples, self.new_samples = self.new_samples, []
             self.mutex.unlock()
 
+            # Do inference if needed
+            if len(inference_items) > 0:
+                model_input = torch.stack(inference_items)
+                self.inference_request.emit(model_input)            
+
             # Add any new samples
             for X, y, type in new_samples:
                 self.model_element.datasets[type].add_pair(X, y)
@@ -198,12 +203,6 @@ class ModelController(QThread):
                     self.wait_train_for_n_samples = max(0, self.wait_train_for_n_samples -1)
             if self.wait_train_for_n_samples > 0:
                 continue
-
-            # Do inference if needed
-            if len(inference_items) > 0:
-                model_input = torch.stack(inference_items)
-                print("INFERENCE ON", len(model_input), "ELEMENTS")
-                self.inference_request.emit(model_input)            
 
             # Wait for new samples if needed
             if len(loss_per_epoch) > 50:
@@ -224,7 +223,6 @@ class ModelController(QThread):
     
     @pyqtSlot(torch.Tensor)
     def request_inference(self, X: torch.Tensor):
-        # print("REQ INF")
         self.mutex.lock()
         self.inference_queue.append(X)
         self.condition.wakeAll()

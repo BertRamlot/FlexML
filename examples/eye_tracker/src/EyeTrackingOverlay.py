@@ -18,17 +18,18 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
         self.inference_history = []
 
     @QtCore.pyqtSlot(np.ndarray)
-    def register_gt_position(self, pos):
+    def register_gt_position(self, pos: np.ndarray):
         self.gt_history.append(pos)
         if len(self.gt_history) > 5:
             self.gt_history = self.gt_history[-5:]
         self.update()
 
-    @QtCore.pyqtSlot(list)
-    def register_inference_positions(self, positions):
-        self.inference_history.append(positions * self.window_dims.max())
-        if len(self.inference_history) > 5:
-            self.inference_history = self.inference_history[-5:]
+    @QtCore.pyqtSlot(np.ndarray)
+    def register_inference_positions(self, positions: np.ndarray):
+        for pos in positions:
+            self.inference_history.append((pos * self.window_dims.max()).round().astype(np.int32))
+            if len(self.inference_history) > 10:
+                self.inference_history = self.inference_history[-10:]
         self.update()
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
@@ -68,7 +69,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
             return
         
         colors = (QtCore.Qt.GlobalColor.blue, QtCore.Qt.GlobalColor.green, QtCore.Qt.GlobalColor.red, QtCore.Qt.GlobalColor.yellow)
-        pen = QtGui.QPen(QtCore.Qt.GlobalColor.green, 4, QtCore.Qt.GlobalColor.SolidLine)
+        pen = QtGui.QPen(QtCore.Qt.GlobalColor.green, 4, QtCore.Qt.PenStyle.SolidLine)
 
         if len(self.inference_history[-1]) == 0:
             r = 200
@@ -78,10 +79,9 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
             qp.drawText(x-50, y, "No valid face(s) found")
 
         # Inference circles
-        r = 30
-        for i, pred_loc in enumerate(self.inference_history[-1]):
-            x, y = (pred_loc * self.window_dims.max()).round().astype(np.int32)
-
+        for i, pred_loc in enumerate(self.inference_history):
+            r = int(30/(len(self.inference_history)-i+1))
+            x, y = pred_loc
             pen.setColor(colors[i % len(colors)])
             qp.setPen(pen)
             qp.drawEllipse(x-r, y-r, 2*r, 2*r)
