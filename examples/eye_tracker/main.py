@@ -132,7 +132,6 @@ if __name__ == "__main__":
             elapsed_since_last_pass = None
         if elapsed_since_last_pass is None or elapsed_since_last_pass > 0.5:
             filtr.last_pass_time = time.time()
-            print(elapsed_since_last_pass)
             return True
         return False
     new_train_samples = Filter(new_train_samples_filter_func)
