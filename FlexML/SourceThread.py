@@ -47,7 +47,7 @@ class WebcamSourceThread(SourceThread):
     def get(self) -> tuple[bool, np.ndarray]:
         return self.cap.read()
 
-class ScreenSourceThread(SourceThread):
+class VideoFileSourceThread(SourceThread):
     def __init__(self, timeout: int, path: Path):
         super().__init__(timeout)
         self.cap = cv2.VideoCapture(str(path))
@@ -69,7 +69,4 @@ class ScreenSourceThread(SourceThread):
 
     def get(self) -> tuple[bool, np.ndarray]:
         sct_img = self.sct.grab()
-        return sct_img
-
-# Window capture
-    
+        return sct_img    

@@ -12,6 +12,7 @@ class Sample():
         self.gt = gt
 
 class SampleCollection(QObject):
+    """Collection of samples."""
     new_sample = pyqtSignal(Sample)
     
     def __init__(self, dataset_path: Path):

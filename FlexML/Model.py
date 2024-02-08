@@ -38,6 +38,8 @@ def epoch_report(tb_writer, epoch, losses, datasets):
 
 
 class DynamicDataset(Dataset):
+    """Dataset that can be grow dynamically."""
+    
     def __init__(self, type: str | None):
         self.type = type
         self.input_label_pairs: list[tuple[np.ndarray, np.ndarray]] = []

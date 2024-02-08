@@ -20,9 +20,12 @@ class MetadataSampleCollection(SampleCollection):
         super().__init__(path)
 
     def from_metadata(self, metadata) -> MetadataSample:
+        """Returns a MetadataSample from a metadata vector."""
+
         raise NotImplementedError()
 
     def get_metadata_headers(self) -> list[str]:
+        """Returns the CSV headers associated with a metadata vector."""
         raise NotImplementedError()
     
     def publish_all_samples(self) -> int:
