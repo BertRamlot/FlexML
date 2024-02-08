@@ -1,6 +1,9 @@
+import logging
 import numpy as np
 import ctypes
 from PyQt6 import QtGui, QtWidgets, QtCore
+
+from FlexML.Sample import Sample
 
 
 class EyeTrackingOverlay(QtWidgets.QMainWindow):
@@ -24,12 +27,12 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
             self.gt_history = self.gt_history[-5:]
         self.update()
 
-    @QtCore.pyqtSlot(np.ndarray)
-    def register_inference_positions(self, positions: np.ndarray):
-        for pos in positions:
+    @QtCore.pyqtSlot(list, np.ndarray)
+    def register_inference_positions(self, samples: list[Sample], predictions: np.ndarray):
+        for sample, prediction in zip(samples, predictions):
             # Put out of bound coordinates to the edge of the screen. This is not done in the training loop
-            pos = np.clip(pos, 0.0, 1.0)
-            self.inference_history.append((pos * self.window_dims.max()).round().astype(np.int32))
+            prediction = np.clip(prediction, 0.0, 1.0)
+            self.inference_history.append((prediction * self.window_dims.max()).round().astype(np.int32))
             if len(self.inference_history) > 3:
                 self.inference_history = self.inference_history[-3:]
         self.update()
@@ -37,7 +40,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
         super().keyPressEvent(event)
         if event.key() == ord("q"):
-            print("Closing EyeTrackingOverlay")
+            logging.info("Closing overlay")
             self.close()
 
     def paintEvent(self, e):
@@ -47,7 +50,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
         self.draw_predicted_locations(qp)
         qp.end()
 
-    def draw_target_location(self, qp):
+    def draw_target_location(self, qp: QtGui.QPainter):
         if not self.gt_history:
             return
         position = self.gt_history[-1]
@@ -66,7 +69,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
         qp.setPen(pen)
         qp.drawEllipse(x-r, y-r, 2*r, 2*r)
 
-    def draw_predicted_locations(self, qp):
+    def draw_predicted_locations(self, qp: QtGui.QPainter):
         if not self.inference_history:
             return
         

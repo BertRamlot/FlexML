@@ -12,8 +12,9 @@ class MetadataSample(Sample):
     def get_metadata(self) -> list:
         raise NotImplementedError()
 
+
 class MetadataSampleCollection(SampleCollection):
-    """Dataset defined by a folder which contains a 'metadata.csv' where each row corresponds to a MetadataSample."""
+    """SampleCollection defined by a folder which contains a 'metadata.csv' where each row corresponds to a MetadataSample."""
 
     def __init__(self, path: Path):
         super().__init__(path)

@@ -1,19 +1,7 @@
 import queue
+import collections
 
 from PyQt6.QtCore import QThread, QObject, QEventLoop, pyqtSignal, pyqtSlot
-
-
-# TODO: support primitives
-class ConstantSource(QThread):
-    new_item = pyqtSignal(object)
-
-    def __init__(self, obj: object):
-        super().__init__()
-        self.obj = obj
-
-    def run(self):
-        while True:
-            self.new_item.emit(self.obj)
 
 
 class BufferThread(QThread):
@@ -32,13 +20,11 @@ class BufferThread(QThread):
             pass
 
     def run(self):
-        self.exec()
-
-    def exec(self):
         while True:
             item = self._queue.get()
             self.new_item.emit(item)
             self._queue.task_done()
+            # TODO: remove?
             self.eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
 
 class AttributeSelector(QObject):
@@ -58,7 +44,7 @@ class AttributeSelector(QObject):
 class Convertor(QObject):
     output = pyqtSignal(object)
 
-    def __init__(self, function) -> None:
+    def __init__(self, function: collections.abc.Callable) -> None:
         super().__init__()
         self.function = function
     
@@ -69,7 +55,7 @@ class Convertor(QObject):
 class Filter(QObject):
     output = pyqtSignal(object)
     
-    def __init__(self, predicate):
+    def __init__(self, predicate: collections.abc.Callable):
         super().__init__()
         self.predicate = predicate
     

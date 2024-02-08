@@ -6,6 +6,7 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
 from examples.eye_tracker.src.FaceSample import FaceSample
 
+
 def face_sample_to_y_tensor(sample, device):
     screen_max_dim = sample.window_dims.max()
     return torch.tensor(sample.gt).to(device=device) / screen_max_dim
@@ -13,11 +14,8 @@ def face_sample_to_y_tensor(sample, device):
 def face_sample_to_X_tensor(sample: FaceSample, device):
     def pre_process_img(img):
         processed_img = img
-        # processed_img = cv2.resize(processed_img, (40, 10), interpolation=cv2.INTER_CUBIC)
         processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2GRAY)
-        # processed_img = cv2.Canny(processed_img, 80, 180)
-        # processed_img = cv2.normalize(processed_img, None, 0, 255, cv2.NORM_MINMAX)
-        return np.asarray(processed_img)
+        return np.asarray(processed_img)/255.0
     left_eye_tensor = torch.from_numpy(pre_process_img(sample.get_eye_im("left"))).float()
     right_eye_tensor = torch.from_numpy(pre_process_img(sample.get_eye_im("right"))).float()
 
@@ -26,12 +24,12 @@ def face_sample_to_X_tensor(sample: FaceSample, device):
     cv2.imshow("FACE", sample.get_face_img())
     cv2.imshow("EYE_L", pre_process_img(sample.get_eye_im("left")))
     cv2.imshow("EYE_R", pre_process_img(sample.get_eye_im("right")))
-    cv2.waitKey(0) 
     """
+    # cv2.waitKey(0) 
 
     tensor_vals = []
-    tensor_vals.append(left_eye_tensor.flatten()/255.0)
-    tensor_vals.append(right_eye_tensor.flatten()/255.0)
+    tensor_vals.append(left_eye_tensor.flatten())
+    tensor_vals.append(right_eye_tensor.flatten())
     
     # TODO: do this another way
     screen_max_dim = max(sample.get_img()[:2].shape)
@@ -50,7 +48,7 @@ def face_sample_to_X_tensor(sample: FaceSample, device):
 
 
 class FaceSampleToTrainPair(QObject):
-    output_train_pair = pyqtSignal(torch.Tensor, torch.Tensor, str)
+    output_train_pair = pyqtSignal(FaceSample, torch.Tensor, torch.Tensor)
 
     def __init__(self, device: str):
         super().__init__()
@@ -62,10 +60,10 @@ class FaceSampleToTrainPair(QObject):
             return
         X = face_sample_to_X_tensor(sample, self.device)
         y = face_sample_to_y_tensor(sample, self.device)
-        self.output_train_pair.emit(X, y, sample.type)
+        self.output_train_pair.emit(sample, X, y)
 
-class FaceSampleToTensor(QObject):
-    output_tensor = pyqtSignal(torch.Tensor)
+class FaceSampleToInferencePair(QObject):
+    output_tensor = pyqtSignal(FaceSample, torch.Tensor)
 
     def __init__(self, device: str):
         super().__init__(None)
@@ -74,14 +72,13 @@ class FaceSampleToTensor(QObject):
     @pyqtSlot(FaceSample)
     def to_tensor(self, sample: FaceSample):
         X = face_sample_to_X_tensor(sample, self.device)
-        self.output_tensor.emit(X)
+        self.output_tensor.emit(sample, X)
 
 class FaceNetwork(nn.Module):
     def __init__(self):
         super().__init__()
 
         self.metadata_size = 0 # 4 + 68*2
-        self.input_eye_size = 40*16
 
         out_eye_size = 4
 
@@ -91,7 +88,7 @@ class FaceNetwork(nn.Module):
                 nn.ReLU(),
                 nn.MaxPool2d(kernel_size=(2, 2), stride=(2, 2)),
                 nn.Flatten(),
-                nn.Linear(108*4, out_eye_size),
+                nn.Linear(4*280, out_eye_size), # 108
                 nn.ReLU(),
             )
         self.left_eye_stack = gen_eye_stack()
@@ -102,12 +99,14 @@ class FaceNetwork(nn.Module):
         )
 
     def forward(self, x):
-        left_eye_out = self.left_eye_stack(x[:,:self.input_eye_size].reshape(-1,1,16,40))
-        right_eye_out = self.right_eye_stack(x[:,self.input_eye_size:2*self.input_eye_size].reshape(-1,1,16,40))
+        eye_size = FaceSample.EYE_DIMENSIONS.prod()
 
-        main_input = [left_eye_out, right_eye_out]
+        left_eye_input = x[:,:eye_size].reshape(-1,1,*FaceSample.EYE_DIMENSIONS)
+        right_eye_input = x[:,eye_size:2*eye_size].reshape(-1,1,*FaceSample.EYE_DIMENSIONS)
+
+        main_input = [self.left_eye_stack(left_eye_input), self.right_eye_stack(right_eye_input)]
         if self.metadata_size > 0:
             main_input.append(x[:,-self.metadata_size:])
         main_input = torch.cat(main_input, 1)
         output = self.main_stack(main_input)
-        return output # torch.clamp(output, min=0.0, max=1.0)
+        return output

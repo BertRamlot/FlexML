@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import dlib
 import cv2
@@ -8,7 +9,8 @@ from examples.eye_tracker.src.GazeSample import GazeSample, GazeSampleCollection
 
 
 class FaceSample(GazeSample):
-    """GazeSample that has extra features that define the contour of a SINGLE face/eyes/mouth/... ."""
+    """GazeSample that has extra features that define the contour (incl. eyes, mouth, ...) of a SINGLE face."""
+    EYE_DIMENSIONS = np.array([60, 24])
 
     def __init__(self, sample: GazeSample, features: np.ndarray):
         self.__dict__.update(sample.__dict__)
@@ -31,15 +33,22 @@ class FaceSample(GazeSample):
             raise RuntimeError("Invalid eye_type:", eye_type)
         
         # This is another way (different results)
-        # min_x, min_y = self.features[idx:idx+6].min(axis=0) # - 5
-        # max_x, max_y = self.features[idx:idx+6].max(axis=0) # + 5
+        min_real_x, min_real_y = self.features[idx:idx+6].min(axis=0)
+        max_real_x, max_real_y = self.features[idx:idx+6].max(axis=0)
+        real_eye_width = max_real_x - min_real_x
+        real_eye_height = max_real_y - min_real_y
 
-        center = self.features[idx:idx+6].mean(axis=0)
-
-        min_x, min_y = np.round(center - np.array([20, 8])).astype(np.int32)
-        max_x, max_y = np.round(center + np.array([20, 8])).astype(np.int32)
+        if real_eye_width > 1.5 * FaceSample.EYE_DIMENSIONS[0]:
+            logging.warn("Real eye width detected that is much larger than crop heigth")
+        if real_eye_height > 1.5 * FaceSample.EYE_DIMENSIONS[1]:
+            logging.warn("Real eye height detected that is much larger than crop heigth")
+        center = np.round(self.features[idx:idx+6].mean(axis=0)).astype(np.int32)
+        min_crop_x, min_crop_y = center - FaceSample.EYE_DIMENSIONS//2
+        max_crop_x, max_crop_y = center + (FaceSample.EYE_DIMENSIONS - FaceSample.EYE_DIMENSIONS//2)
         
-        return self.get_img()[min_y:max_y, min_x:max_x]
+        img = self.get_img()
+
+        return img[min_crop_y:max_crop_y, min_crop_x:max_crop_x]
 
 class FaceSampleCollection(GazeSampleCollection):
     def __init__(self, path: Path):
@@ -68,10 +77,8 @@ class GazeToFaceSampleConvertor(QObject):
         img = sample.get_img()        
         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         face_boxes = self.face_detector(gray_img)
-        # features = np.zeros((len(face_boxes), 68, 2), dtype=np.int32)
-        for i, face_box in enumerate(face_boxes):
+        for face_box in face_boxes:
             landmarks = self.face_feature_predictor(gray_img, box=face_box)
             face_features = np.array([[p.x, p.y] for p in landmarks.parts()])
-            # features[i, :, :] = face_features
             face_sample = FaceSample(sample, face_features)
             self.face_samples.emit(face_sample)

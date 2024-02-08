@@ -1,21 +1,26 @@
 import sys
+import time
+import logging
 import signal
 from pathlib import Path
 from argparse import ArgumentParser
+import torch
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QCoreApplication, QEventLoop
 
 from FlexML.SourceThread import WebcamSourceThread
 from FlexML.Model import ModelElement, ModelController
 from FlexML.Helper import BufferThread, Filter, Convertor
-from FlexML.Linker import link_elements
+from FlexML.Linker import link_QObjects
 
 from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
 from examples.eye_tracker.src.TargetSource import SimpleBallSourceThread
 from examples.eye_tracker.src.FaceSample import GazeToFaceSampleConvertor
-from examples.eye_tracker.src.FaceNetwork import FaceSampleToTrainPair, face_sample_to_X_tensor
+from examples.eye_tracker.src.FaceNetwork import FaceSampleToTrainPair, FaceSampleToInferencePair
 from examples.eye_tracker.src.GazeSample import GazeSampleMuxer
 from examples.eye_tracker.src.FaceSample import FaceSampleCollection
+
+from examples.eye_tracker.src.FaceNetwork import FaceNetwork
 
 
 def get_source_worker(uid: str|None):
@@ -32,6 +37,8 @@ def get_source_worker(uid: str|None):
 
 
 if __name__ == "__main__":
+    logging.getLogger().setLevel(logging.INFO)
+
     parser = ArgumentParser(description="Overlay script parameters")
     parser.add_argument("--load_datasets", type=str, nargs="*", default=None)
     parser.add_argument("--save_dataset", type=str, default=None)
@@ -40,7 +47,6 @@ if __name__ == "__main__":
     parser.add_argument("--gt_source", type=str, default=None, choices=["simple-ball"])
     parser.add_argument("--img_source", type=str, default=None, choices=["webcam"])
     parser.add_argument("--model", type=str, default=None)
-    parser.add_argument("--model_type", type=str, default="face", choices=["face"])
     parser.add_argument('--device', type=str, default="cuda")
     args = parser.parse_args(sys.argv[1:])
 
@@ -56,9 +62,23 @@ if __name__ == "__main__":
 
     # Create model thread
     if args.model:
+        model_path = module_directory / Path("models") / args.model
+        pth_path = max(model_path.glob("epoch_*.pth"), default=None)
+        if pth_path:
+            logging.info(f"Loading existing model: {pth_path}")
+            # TODO:
+            checkpoint = torch.load(pth_path) # , map_location=torch.device('cpu'))
+        else:
+            logging.info("Creating new model")
+            checkpoint = None
+            model_path.mkdir(parents=True, exist_ok=True)
+
+        model = FaceNetwork().to(args.device)
         model_element = ModelElement(
-            module_directory / Path("models") / args.model,
-            args.model_type,
+            model,
+            torch.optim.Adam(model.parameters(), lr=1e-3),
+            checkpoint,
+            model_path,
             args.device,
             [
                 {
@@ -74,7 +94,13 @@ if __name__ == "__main__":
                 {
                     "type": "test"
                 }
-            ]
+            ],
+            {
+                "l1_x": lambda y1, y2: (y1[..., 0] - y2[..., 0]).abs().mean(),
+                "l1_y": lambda y1, y2: (y1[..., 1] - y2[..., 1]).abs().mean(),
+                "euclid": lambda y1, y2: (y1-y2).pow(2).sum(-1).sqrt().mean(),
+                "criterion": lambda y1, y2: (y1-y2).pow(2).sum(-1).sqrt().mean()
+            }
         )
         model_controller = ModelController(model_element)
         model_element.moveToThread(model_controller)
@@ -106,48 +132,51 @@ if __name__ == "__main__":
             elapsed_since_last_pass = None
         if elapsed_since_last_pass is None or elapsed_since_last_pass > 0.5:
             filtr.last_pass_time = time.time()
+            print(elapsed_since_last_pass)
             return True
         return False
     new_train_samples = Filter(new_train_samples_filter_func)
-    link_elements(gaze_to_face_sample, new_train_samples)
+    link_QObjects(gaze_to_face_sample, new_train_samples)
 
     # Live pipeline
-    link_elements(gt_src_thread,  ("set_last_label", sample_muxer))
-    link_elements(img_src_thread, ("set_last_img",   sample_muxer), sample_buffer, gaze_to_face_sample)
-    link_elements(model_controller, model_element, ("register_inference_positions", overlay))
-    link_elements(gt_src_thread, ("register_gt_position", overlay))
+    link_QObjects(gt_src_thread,  ("set_last_label", sample_muxer))
+    link_QObjects(img_src_thread, ("set_last_img",   sample_muxer), sample_buffer, gaze_to_face_sample)
+    link_QObjects(model_controller, model_element, ("register_inference_positions", overlay))
+    link_QObjects(gt_src_thread, ("register_gt_position", overlay))
 
     if args.train:
-        link_elements(new_train_samples, face_sample_to_train_pair, model_controller)
+        link_QObjects(new_train_samples, face_sample_to_train_pair, model_controller)
 
     if args.inference:
-        inference_convertor = Convertor(lambda s: face_sample_to_X_tensor(s, args.device))
-        link_elements(gaze_to_face_sample, inference_convertor, model_controller)
+        face_sample_to_inference_pair = FaceSampleToInferencePair(args.device)
+        link_QObjects(gaze_to_face_sample, face_sample_to_inference_pair, model_controller)
 
     # Save data to disk
     if args.save_dataset:
         save_path = module_directory / Path("datasets") / args.save_dataset
-        print(f"Saving new samples in: {save_path}")
+        logging.info(f"Saving new samples in: {save_path}")
         save_coll = FaceSampleCollection(module_directory / Path("datasets") / args.save_dataset)
-        link_elements( new_train_samples, save_coll)
+        link_QObjects( new_train_samples, save_coll)
     else:
-        print("Not saving new samples")
+        logging.info("Not saving new samples")
     
     # Load all data from disk
     if args.load_datasets:
         if not args.train:
-            print("WARNING: You passed datasets to load without enabling training.")
+            logging.warn("Load dataset(s) passed without enabling training: ignoring the load dataset(s)")
         else:
             total_published_samples = 0
             load_data_colls = [FaceSampleCollection(module_directory / "datasets" / load_dataset_path) for load_dataset_path in args.load_datasets]
             for dataset_source in load_data_colls:
-                link_elements(dataset_source, face_sample_to_train_pair)
+                link_QObjects(dataset_source, face_sample_to_train_pair)
             for dataset_source in load_data_colls:
-                total_published_samples += dataset_source.publish_all_samples()
-            print(f"Loaded {total_published_samples} samples.")
+                sample_count = dataset_source.publish_all_samples()
+                logging.info(f"Loaded {total_published_samples} samples from {dataset_source.dataset_path}")
+                total_published_samples += sample_count
+            logging.info(f"Total loaded samples: {total_published_samples}")
             # TODO: wait for all samples to be processes before starting the live threads?
     else:
-        print("Not loading any datasets")
+        logging.info("Not loading any datasets")
     
     if model_controller:
         model_controller.start()
@@ -159,19 +188,16 @@ if __name__ == "__main__":
         gt_src_thread.start()
  
     # Event loop
-    print("Starting application event loop")
     if overlay:
+        logging.info("Starting default event loop")
         sys.exit(app.exec())
     else:
         # TODO: this is a hack to avoid calling "app.exec()" which prevents you from interupting (w/ "CTRL+C") when there is no GUI.
         # There is probably a better way to do this.
+        logging.info("Starting headless event loop")
         global quiting
         quiting = False
-        def quit_application(_1, _2):
-            global quiting
-            quiting = True
-        signal.signal(signal.SIGINT, quit_application)
-        import time
+        signal.signal(signal.SIGINT, lambda _, __: globals().update({'quitting': True}))
         while not quiting:
             app.thread().eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
             time.sleep(0.01)

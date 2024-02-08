@@ -1,5 +1,7 @@
+import logging
 import numpy as np
 import cv2
+import mss
 import time
 from pathlib import Path
 from PyQt6.QtCore import QThread, pyqtSignal, QEventLoop
@@ -13,9 +15,6 @@ class SourceThread(QThread):
         self.timeout = timeout
 
     def run(self):
-        self.exec()
-
-    def exec(self):
         while not self.is_done():
             t0 = time.time()
             success, item = self.get()
@@ -38,9 +37,9 @@ class SourceThread(QThread):
 class WebcamSourceThread(SourceThread):
     def __init__(self, timeout: int, index: int = 0):
         super().__init__(timeout)
-        print(f"Starting webcam capture (index={index}) ...", end='')
+        logging.info(f"Starting webcam capture (index={index}) ...")
         self.cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
-        print(" done")
+        logging.info(f"Finished starting webcam capture (index={index})")
 
     def __del__(self):
         self.cap.release()
@@ -48,7 +47,7 @@ class WebcamSourceThread(SourceThread):
     def get(self) -> tuple[bool, np.ndarray]:
         return self.cap.read()
 
-class VideoFileSourceThread(SourceThread):
+class ScreenSourceThread(SourceThread):
     def __init__(self, timeout: int, path: Path):
         super().__init__(timeout)
         self.cap = cv2.VideoCapture(str(path))
@@ -59,6 +58,18 @@ class VideoFileSourceThread(SourceThread):
     def get(self) -> tuple[bool, np.ndarray]:
         return self.cap.read()
 
-# Screen capture
+class ScreenSourceThread(SourceThread):
+    def __init__(self, timeout: int, monitor: dict[str, int] | tuple[int, int, int, int] | None):
+        super().__init__(timeout)
+        self.sct = mss.mss()
+        self.monitor = self.sct.monitors()[1] if monitor is None else monitor
+
+    def __del__(self):
+        self.sct.release()
+
+    def get(self) -> tuple[bool, np.ndarray]:
+        sct_img = self.sct.grab()
+        return sct_img
+
 # Window capture
     

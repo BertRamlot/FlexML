@@ -1,22 +1,34 @@
-from typing import Callable
+import logging
+from collections.abc import Callable
 from PyQt6.QtCore import QObject, QMetaMethod
 
 
-def get_non_pyqt_methods(obj: QObject, method_type: QMetaMethod.MethodType, func_name: str|None) -> list[tuple[str, Callable, QMetaMethod]]:    
+def get_non_pyqt_methods(qobject: QObject, method_type: QMetaMethod.MethodType, func_name: str | None) -> list[tuple[str, Callable, QMetaMethod]]:
+    """
+    Get non-PyQt methods of a QObject instance.
+
+    Args:
+        qobject (QObject): The QObject instance.
+        method_type (QMetaMethod.MethodType): Type of methods to retrieve (Signal or Slot).
+        func_name (str, None): Name of the method to filter (optional).
+
+    Returns:
+        list[tuple[str, Callable, QMetaMethod]]: List of method tuples containing method name, method reference, and QMetaMethod.
+    """
     candidate_methods = {}
-    for subcls in type(obj).mro():
+    for subcls in type(qobject).mro():
         if subcls.__module__.startswith("PyQt6."):
             # Ignore all native PyQt signals
             break
-        for key, value in sorted(vars(subcls).items()):
-            if not callable(value):
+        for variable_name, variable in vars(subcls).items():
+            if not callable(variable):
                 continue
-            if func_name is not None and key != func_name:
+            if func_name is not None and variable_name != func_name:
                 continue
-            candidate_methods[key] = getattr(obj, key)
+            candidate_methods[variable_name] = getattr(qobject, variable_name)
 
     methods = []
-    meta_obj = obj.metaObject()
+    meta_obj = qobject.metaObject()
     for i in range(meta_obj.methodCount()):
         meta_method_obj = meta_obj.method(i)
         method_name = meta_method_obj.methodSignature().data().decode().partition("(")[0]
@@ -27,49 +39,40 @@ def get_non_pyqt_methods(obj: QObject, method_type: QMetaMethod.MethodType, func
         methods.append((method_name, candidate_methods[method_name], meta_method_obj))
     return methods
 
-"""
-element should be any of the following:
-- QObject
-- (str, QObject)
-- (QObject, str)
-- (str, QObject, str)
-"""
-# TODO: no differentiation btwn different objects, only objects and primitives
-# slots are linked using the decorator types: "pyqtSlot(...)"
-def link_elements(*elements):
-    # Unify input
-    tuple_elements = []
-    for element in elements:
-        if element is None:
-            tuple_elements.append((None, None, None))
-            continue
-        if isinstance(element, tuple):
-            if len(element) == 3:
-                tuple_elements.append(element)
-                continue
-            if len(element) == 2:
-                if isinstance(element[0], QObject):
-                    obj, signal_name = element
-                    tuple_elements.append((None, obj, signal_name))
-                    continue
-                if isinstance(element[1], QObject):
-                    slot_name, obj = element
-                    tuple_elements.append((slot_name, obj, None))
-                    continue
-            raise ValueError("Invalid tuple (Wrong length):", element)
-        if isinstance(element, QObject):
-            obj = element
-            tuple_elements.append((None, obj, None))
-            continue
-        raise ValueError("Invalid element (Invalid type):", element)
+def link_QObjects(*elements: QObject | tuple[str, QObject] | tuple[QObject, str] | tuple[str, QObject, str] | None):
+    """
+    Link signals and slots between QObject instances.
 
-    
-    for i in range(1, len(tuple_elements)):
-        _, send_obj, send_signal_name = tuple_elements[i-1]
-        rcv_slot_name, rcv_obj, _ = tuple_elements[i]
+    Args:
+        elements: List of elements to link. Each element can be any of the following formats:
+                    - QObject instance
+                    - (QObject instance, signal name)
+                    - (slot name, QObject instance)
+                    - (slot name, QObject instance, signal name)
+    """
+    # Unify input
+    unified_elements = []
+    for ele in elements:
+        if ele is None:
+            slot_name, qobject, signal_name = None, None, None
+        elif isinstance(ele, QObject):
+            slot_name, qobject, signal_name = None, ele, None
+        elif isinstance(ele, tuple) and len(ele) == 3 and isinstance(ele[0], str) and isinstance(ele[1], QObject) and isinstance(ele[2], str):
+            slot_name, qobject, signal_name = ele
+        elif isinstance(ele, tuple) and len(ele) == 2 and isinstance(ele[0], QObject) and isinstance(ele[1], str):
+            slot_name, qobject, signal_name = None, *ele
+        elif isinstance(ele, tuple) and len(ele) == 2 and isinstance(ele[0], str) and isinstance(ele[1], QObject):
+            slot_name, qobject, signal_name = *ele, None
+        else:
+            raise ValueError("Invalid element format:", ele)
+        unified_elements.append((slot_name, qobject, signal_name))
+
+    for i in range(len(unified_elements)-1):
+        _, send_obj, send_signal_name = unified_elements[i]
+        rcv_slot_name, rcv_obj, _ = unified_elements[i+1]
 
         if send_obj is None or rcv_obj is None:
-            print(f"Skipping connection: {send_obj} {rcv_obj}")
+            logging.info(f"Skipping connection between {send_obj} and {rcv_obj}")
             continue
 
         signals = get_non_pyqt_methods(send_obj, QMetaMethod.MethodType.Signal, send_signal_name)
@@ -77,22 +80,15 @@ def link_elements(*elements):
         
         for signal_name, signal_method, signal_meta_method in signals:
             signal_param_types = signal_meta_method.parameterTypes()
-            matching_slots = []
-            for slot_name, slot_method, slot_meta_method in slots:
-                slot_param_types = slot_meta_method.parameterTypes()
-                if len(signal_param_types) != len(slot_param_types):
-                    continue
-                if all(signal_param_types[i] == slot_param_types[i] for i in range(len(signal_param_types))):
-                    matching_slots.append(slot_method)
+            matching_slots = [slot_method for _, slot_method, slot_meta_method in slots if signal_param_types == slot_meta_method.parameterTypes()]
             # Duplicates can exist due to overriding a slot in a base-class with a slot
             matching_slots = list(dict.fromkeys(matching_slots))
             if len(matching_slots) == 0:
-                print(f"Failed to link (no match) {send_obj} and {rcv_obj}")
+                logging.error(f"Failed to link (no match found) between {send_obj} and {rcv_obj}")
                 continue
             elif len(matching_slots) > 1:
-                print(f"WARNING: multiple valid signal/slot combinations found for {send_obj} and {rcv_obj}")
-            # print("Conncection:")
-            # print(f"- '{signal_method}'")
-            # print(f"- '{matching_slots[0]}'")
+                logging.warn(f"Multiple valid signal/slot combinations found between {send_obj} and {rcv_obj}")
+
+            logging.debug(f"Connecting {signal_method} with {matching_slots[0]}")
             signal_method.connect(matching_slots[0])
             
