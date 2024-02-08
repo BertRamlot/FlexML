@@ -40,29 +40,31 @@ def epoch_report(tb_writer, epoch, losses, datasets):
 class DynamicDataset(Dataset):
     def __init__(self, type: str | None):
         self.type = type
-        self.input_label_pairs = []
-        self.samples = []
+        self.input_label_pairs: list[tuple[np.ndarray, np.ndarray]] = []
+        self.samples: list[Sample] = []
 
-    def __len__(self):
+    def __len__(self) -> int:
         # Min size needs to be atleast one for pytorch DataLoader to not throw an error when using "shuffle=True"
         # Another way to resolve this is to write your own custom sampler:
         # https://stackoverflow.com/questions/70369070/can-a-pytorch-dataloader-start-with-an-empty-dataset
         return max(1, len(self.input_label_pairs))
 
-    def __getitem__(self, idx):
+    def __getitem__(self, idx) -> (np.ndarray, np.ndarray):
+        # TODO: this error when size is 0, see the "__len__" comment.
         return self.input_label_pairs[idx]
     
     def add_pair(self, sample: Sample, X: torch.Tensor, y: torch.Tensor):
-        self.samples.append(sample)
         self.input_label_pairs.append((len(self.samples), X, y))
+        self.samples.append(sample)
 
-    def get_sample(self, index: int):
+    def get_sample(self, index: int) -> Sample:
         return self.samples[index]
 
 class ModelElement(QObject):
     """Manages the pytorch model."""
 
     inference_results = pyqtSignal(list, np.ndarray)
+    sample_errors = pyqtSignal(list, np.ndarray)
 
     SAVE_EVERY_N_EPOCH = 50
 
@@ -109,15 +111,19 @@ class ModelElement(QObject):
                 for sample_indices, X, y in data_loader:
                     X = X.to(self.device, non_blocking=True)
                     y = y.to(self.device, non_blocking=True)
-
+                    samples = [self.datasets[type].get_sample(index) for index in sample_indices]
                     output = self.model(X)
                     for name, loss_fn in self.loss_functions.items():
                         loss = loss_fn(output, y)
-                        losses[name] += loss.item()
-                        if do_grad and name == "criterion":
-                            self.optimizer.zero_grad()
-                            loss.backward()
-                            self.optimizer.step()
+                        loss_mean = loss.mean()
+                        losses[name] += loss_mean.item()
+                        if name == "criterion":
+                            loss_per_sample = loss.cpu().detach().numpy()
+                            self.sample_errors.emit(samples, loss_per_sample)
+                            if do_grad:
+                                self.optimizer.zero_grad()
+                                loss_mean.backward()
+                                self.optimizer.step()
 
             for name in losses:
                 losses[name] /= len(data_loader)

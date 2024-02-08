@@ -1,4 +1,5 @@
 import sys
+import numpy as np
 import time
 import logging
 import signal
@@ -6,20 +7,20 @@ from pathlib import Path
 from argparse import ArgumentParser
 import torch
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QCoreApplication, QEventLoop
+from PyQt6.QtCore import QCoreApplication, QEventLoop, QObject, pyqtSignal, pyqtSlot
 
 from FlexML.SourceThread import WebcamSourceThread
+from FlexML.Sample import Sample
 from FlexML.Model import ModelElement, ModelController
-from FlexML.Helper import BufferThread, Filter, Convertor
+from FlexML.Helper import BufferThread, Filter
 from FlexML.Linker import link_QObjects
 
 from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
-from examples.eye_tracker.src.TargetSource import SimpleBallSourceThread
+from examples.eye_tracker.src.TargetSource import SimpleBallSourceThread, FeedbackBallSourceThread
 from examples.eye_tracker.src.FaceSample import GazeToFaceSampleConvertor
 from examples.eye_tracker.src.FaceNetwork import FaceSampleToTrainPair, FaceSampleToInferencePair
 from examples.eye_tracker.src.GazeSample import GazeSampleMuxer
 from examples.eye_tracker.src.FaceSample import FaceSampleCollection
-
 from examples.eye_tracker.src.FaceNetwork import FaceNetwork
 
 
@@ -29,6 +30,8 @@ def get_source_worker(uid: str|None):
     elif uid == "simple-ball":
         # Low timeout to keep GUI stutters to a minimum
         return SimpleBallSourceThread(0.02)
+    elif uid == "feedback-ball":
+        return FeedbackBallSourceThread(0.02)
     elif uid == "webcam":
         # Slight timeout to prevent to many samples that are near equal
         return WebcamSourceThread(0.03)
@@ -44,7 +47,7 @@ if __name__ == "__main__":
     parser.add_argument("--save_dataset", type=str, default=None)
     parser.add_argument("--train", action='store_true')
     parser.add_argument("--inference", action='store_true')
-    parser.add_argument("--gt_source", type=str, default=None, choices=["simple-ball"])
+    parser.add_argument("--gt_source", type=str, default=None, choices=["simple-ball", "feedback-ball"])
     parser.add_argument("--img_source", type=str, default=None, choices=["webcam"])
     parser.add_argument("--model", type=str, default=None)
     parser.add_argument('--device', type=str, default="cuda")
@@ -96,10 +99,10 @@ if __name__ == "__main__":
                 }
             ],
             {
-                "l1_x": lambda y1, y2: (y1[..., 0] - y2[..., 0]).abs().mean(),
-                "l1_y": lambda y1, y2: (y1[..., 1] - y2[..., 1]).abs().mean(),
-                "euclid": lambda y1, y2: (y1-y2).pow(2).sum(-1).sqrt().mean(),
-                "criterion": lambda y1, y2: (y1-y2).pow(2).sum(-1).sqrt().mean()
+                "l1_x": lambda y1, y2: (y1[..., 0] - y2[..., 0]).abs(),
+                "l1_y": lambda y1, y2: (y1[..., 1] - y2[..., 1]).abs(),
+                "euclid": lambda y1, y2: (y1-y2).pow(2).sum(-1).sqrt(),
+                "criterion": lambda y1, y2: (y1-y2).pow(2).sum(-1).sqrt()
             }
         )
         model_controller = ModelController(model_element)
@@ -130,7 +133,7 @@ if __name__ == "__main__":
             elapsed_since_last_pass = time.time() - filtr.last_pass_time
         else:
             elapsed_since_last_pass = None
-        if elapsed_since_last_pass is None or elapsed_since_last_pass > 0.5:
+        if elapsed_since_last_pass is None or elapsed_since_last_pass > 1.0:
             filtr.last_pass_time = time.time()
             return True
         return False
@@ -140,8 +143,20 @@ if __name__ == "__main__":
     # Live pipeline
     link_QObjects(gt_src_thread,  ("set_last_label", sample_muxer))
     link_QObjects(img_src_thread, ("set_last_img",   sample_muxer), sample_buffer, gaze_to_face_sample)
-    link_QObjects(model_controller, model_element, ("register_inference_positions", overlay))
+    link_QObjects(model_controller, (model_element, "inference_results"), ("register_inference_positions", overlay))
     link_QObjects(gt_src_thread, ("register_gt_position", overlay))
+
+    # TODO: kinda hacky
+    if isinstance(gt_src_thread, FeedbackBallSourceThread):
+        link_QObjects((model_element, "sample_errors"), gt_src_thread)
+
+        class TrainPairToSampleLoss(QObject):
+            output = pyqtSignal(list, np.ndarray)
+            @pyqtSlot(Sample, torch.Tensor, torch.Tensor)
+            def on_input(self, sample: Sample, _, __):
+                self.output.emit([sample], np.array([None]))
+        train_pair_to_sample_loss = TrainPairToSampleLoss()
+        link_QObjects(face_sample_to_train_pair, train_pair_to_sample_loss, gt_src_thread)    
 
     if args.train:
         link_QObjects(new_train_samples, face_sample_to_train_pair, model_controller)
@@ -170,7 +185,7 @@ if __name__ == "__main__":
                 link_QObjects(dataset_source, face_sample_to_train_pair)
             for dataset_source in load_data_colls:
                 sample_count = dataset_source.publish_all_samples()
-                logging.info(f"Loaded {total_published_samples} samples from {dataset_source.dataset_path}")
+                logging.info(f"Loaded {sample_count} samples from {dataset_source.dataset_path}")
                 total_published_samples += sample_count
             logging.info(f"Total loaded samples: {total_published_samples}")
             # TODO: wait for all samples to be processes before starting the live threads?
