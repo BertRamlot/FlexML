@@ -124,4 +124,5 @@ graph TD;
 ## Misc
 
 - Epoch numbers are highly inflated as the training data grows over time. The more recently the data was created the less the data will have been used.
-- Using 
+- Training happens in burts, the burst is as long as the validation loss decreases. After a burst, the model waits for more samples.
+- During these bursts, the model is training and the inference speed is severly limited.

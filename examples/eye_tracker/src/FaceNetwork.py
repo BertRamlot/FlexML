@@ -7,8 +7,8 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from examples.eye_tracker.src.FaceSample import FaceSample
 
 
-def face_sample_to_y_tensor(sample, device):
-    screen_max_dim = sample.window_dims.max()
+def face_sample_to_y_tensor(sample: FaceSample, device):
+    screen_max_dim = sample.screen_dims.max()
     return torch.tensor(sample.gt).to(device=device) / screen_max_dim
 
 def face_sample_to_X_tensor(sample: FaceSample, device):

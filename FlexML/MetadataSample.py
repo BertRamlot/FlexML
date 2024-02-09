@@ -18,32 +18,27 @@ class MetadataSampleCollection(SampleCollection):
 
     def __init__(self, path: Path):
         super().__init__(path)
+        self.metadata_csv_path = self.dataset_path / "metadata.csv"
 
     def from_metadata(self, metadata) -> MetadataSample:
-        """Returns a MetadataSample from a metadata vector."""
+        """Returns a MetadataSample created from a metadata vector."""
 
         raise NotImplementedError()
 
     def get_metadata_headers(self) -> list[str]:
-        """Returns the CSV headers associated with a metadata vector."""
+        """Returns the CSV headers associated with the metadata vectors of the collection."""
+
         raise NotImplementedError()
     
     def publish_all_samples(self) -> int:
-        published_samples = 0
-        self.all_metadata = pd.read_csv(self.dataset_path / "metadata.csv")
-        for i in range(len(self.all_metadata)):
-            sample = self.from_metadata(self.all_metadata.iloc[i])
+        all_metadata = pd.read_csv(self.metadata_csv_path)
+        for _, row in all_metadata.iterrows():
+            sample = self.from_metadata(row)
             self.new_sample.emit(sample)
-            published_samples += 1
-        return published_samples
+        return len(all_metadata)
     
     @pyqtSlot(MetadataSample)
     def add_sample(self, sample: MetadataSample):
-        metadata_path = self.dataset_path / "metadata.csv"
-        file_exists = metadata_path.is_file()
-        with open(metadata_path, "a+", newline="", encoding="UTF8") as f:
-            writer = csv.writer(f)
-            if not file_exists:
-                writer.writerow(self.get_metadata_headers())
-            writer.writerow(sample.get_metadata())   
+        df = pd.DataFrame([sample.get_metadata()], columns=self.get_metadata_headers())
+        df.to_csv(self.metadata_csv_path, mode='a', header=not self.metadata_csv_path.is_file(), index=False)
         self.new_sample.emit(sample)

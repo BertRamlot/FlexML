@@ -12,13 +12,13 @@ from FlexML.SourceThread import SourceThread
 class SimpleBallSourceThread(SourceThread):
     """Ball that moves straight at a constant speed. When touching the edge of the screen, it bounces in a random direction."""
 
-    def __init__(self, timeout: int):
+    def __init__(self, screen_dims: np.ndarray, timeout: int):
         super().__init__(timeout)
-        self.screen_bounds = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
+        self.screen_dims = screen_dims
 
         self.ball_time = None
-        self.ball_pos = self.screen_bounds/2.0
-        self.ball_vel = self.screen_bounds/7.0
+        self.ball_pos = self.screen_dims/2.0
+        self.ball_vel = self.screen_dims/7.0
 
     def get(self) -> tuple[bool, tuple[float, float]]:
         now_time = time.time()
@@ -30,9 +30,9 @@ class SimpleBallSourceThread(SourceThread):
             # Update ball properties
             self.ball_time = now_time
             self.ball_pos += self.ball_vel*dt
-            out_of_bounds_mask = (self.ball_pos < 0) | (self.ball_pos > self.screen_bounds)
+            out_of_bounds_mask = (self.ball_pos < 0) | (self.ball_pos > self.screen_dims)
             self.ball_vel *= np.where(out_of_bounds_mask, -1, 1)
-            self.ball_pos = np.clip(self.ball_pos, 0, self.screen_bounds)
+            self.ball_pos = np.clip(self.ball_pos, 0, self.screen_dims)
             if out_of_bounds_mask.any():
                 rnd_angle = random.random()*np.pi/2
                 vel_mag = np.linalg.norm(self.ball_vel)
@@ -43,16 +43,15 @@ class SimpleBallSourceThread(SourceThread):
 class FeedbackBallSourceThread(SourceThread):
     """Ball that is drawn pulled towards areas with few samples and/or high errors."""
 
-    def __init__(self, timeout: int):
+    def __init__(self, screen_dims: np.ndarray, timeout: int):
         super().__init__(timeout)
-        self.screen_bounds = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
+        self.screen_dims = screen_dims
 
         self.ball_time = None
-        self.ball_pos = self.screen_bounds/2.0
-        self.ball_vel = self.screen_bounds/7.0
-        self.min_speed = self.screen_bounds.max()/12.0
-        self.max_speed = self.screen_bounds.max()/5.0
-
+        self.ball_pos = self.screen_dims/2.0
+        self.ball_vel = self.screen_dims/7.0
+        self.min_speed = self.screen_dims.max()/12.0
+        self.max_speed = self.screen_dims.max()/5.0
         self.mutex = QMutex()
         self.error_map: dict[Sample, float] = {}
 
@@ -71,7 +70,7 @@ class FeedbackBallSourceThread(SourceThread):
 
     def get_force_vector(self, position: np.ndarray):
         # We do not like the center
-        center_force = position / self.screen_bounds - 0.5*np.ones((2,))
+        center_force = position / self.screen_dims - 0.5*np.ones((2,))
         center_force = 1000* center_force / (1e-2 + np.linalg.norm(center_force))
 
         self.mutex.lock()
@@ -79,7 +78,7 @@ class FeedbackBallSourceThread(SourceThread):
         over_sample_force = np.zeros((2,))
         for sample, loss in self.error_map.items():
             dist = sample.gt - position
-            over_sample_force += np.copysign(self.screen_bounds.max()**1.5/(10.0 + abs(dist))**2, -dist)
+            over_sample_force += np.copysign(self.screen_dims.max()**1.5/(10.0 + abs(dist))**2, -dist)
         # attracting force towards high loss
         loss_force = np.zeros((2,))
         for sample, loss in self.error_map.items():
@@ -115,8 +114,8 @@ class FeedbackBallSourceThread(SourceThread):
             self.ball_pos += self.ball_vel*dt
 
             # Deal with hitting the edge of the screen
-            out_of_bounds_mask = (self.ball_pos < 0) | (self.ball_pos > self.screen_bounds)
-            self.ball_pos = np.clip(self.ball_pos, 0, self.screen_bounds)
+            out_of_bounds_mask = (self.ball_pos < 0) | (self.ball_pos > self.screen_dims)
+            self.ball_pos = np.clip(self.ball_pos, 0, self.screen_dims)
             self.ball_vel *= np.where(out_of_bounds_mask, -1, 1)
             # self.ball_vel = np.array([0, 0])
 

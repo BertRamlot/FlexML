@@ -1,24 +1,21 @@
 import logging
 import numpy as np
-import ctypes
 from PyQt6 import QtGui, QtWidgets, QtCore
 
 from FlexML.Sample import Sample
 
 
 class EyeTrackingOverlay(QtWidgets.QMainWindow):
-    def __init__(self):
-        super().__init__(flags=QtCore.Qt.WindowType.WindowStaysOnTopHint)
-
-        self.window_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
-        self.setGeometry(0, 0, *self.window_dims)
-        self.setStyleSheet("background:transparent")
-        self.setWindowFlags(QtCore.Qt.WindowType.FramelessWindowHint)
-        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.showFullScreen()
-
+    def __init__(self, window_dims: np.ndarray):
+        super().__init__(flags=QtCore.Qt.WindowType.FramelessWindowHint | QtCore.Qt.WindowType.WindowStaysOnTopHint)
+        self.window_dims = window_dims
         self.gt_history = []
         self.inference_history = []
+
+        self.setGeometry(0, 0, *self.window_dims)
+        self.setStyleSheet("background:transparent")
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.showFullScreen()
 
     @QtCore.pyqtSlot(np.ndarray)
     def register_gt_position(self, pos: np.ndarray):
@@ -78,7 +75,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
 
         if len(self.inference_history[-1]) == 0:
             r = 200
-            x, y = self.screen_dims // 2
+            x, y = self.window_dims // 2
             qp.setPen(pen)
             qp.drawEllipse(x-r, y-r, 2*r, 2*r)
             qp.drawText(x-50, y, "No valid face(s) found")

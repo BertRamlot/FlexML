@@ -1,7 +1,7 @@
 import numpy as np
-import ctypes
 import cv2
 import uuid
+import collections
 from pathlib import Path
 from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 
@@ -11,15 +11,11 @@ from FlexML.MetadataSample import MetadataSample, MetadataSampleCollection
 class GazeSample(MetadataSample):
     """Sample defined by an image (normally just a webcam frame), a screen position, and the corresponding screen dimensions."""
 
-    def __init__(self, img_path: Path, img: np.ndarray, type: str, gt: object, window_dims = None):
-        super().__init__(type, gt)
+    def __init__(self, type: str, screen_position: tuple[int|float, int|float], screen_dims: np.ndarray, img_path: Path | None, img: np.ndarray | None):
+        super().__init__(type, screen_position)
         self.img_path = img_path
         self._img = img
-        if window_dims is None:
-            # TODO
-            self.window_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
-        else:
-            self.window_dims = np.asarray(window_dims)
+        self.screen_dims = screen_dims
 
     def get_img(self) -> np.ndarray:
         if self._img is None:
@@ -29,8 +25,11 @@ class GazeSample(MetadataSample):
         return self._img
     
     def get_metadata(self) -> list:
-        x, y = (None, None) if self.gt is None else self.gt
-        return [self.img_path.name, self.type, *self.window_dims, x, y]
+        if self.gt is None:
+            x, y = (None, None)
+        else:
+            x, y = self.gt
+        return [self.img_path.name, self.type, *self.screen_dims, x, y]
     
 
 class GazeSampleCollection(MetadataSampleCollection):
@@ -41,7 +40,7 @@ class GazeSampleCollection(MetadataSampleCollection):
     def from_metadata(self, metadata) -> GazeSample:
         img_name, type, win_x, win_y, pos_x, pos_y = metadata[:6]
         img_path = self.dataset_path / "raw" / Path(img_name)
-        return GazeSample(img_path, None, type, (pos_x, pos_y), window_dims=(win_x, win_y))
+        return GazeSample(type, (pos_x, pos_y), np.array([win_x, win_y]), img_path, None)
     
     def get_metadata_headers(self) -> list[str]:
         return ["type", "img_name", "win_x", "win_y", "x", "y"]
@@ -62,13 +61,16 @@ class GazeSampleCollection(MetadataSampleCollection):
 
         super().add_sample(sample)
 
-class GazeSampleMuxer(QObject):
+class GazeSampleMuxer(QObject):    
     new_sample = pyqtSignal(GazeSample)
 
-    def __init__(self):
-        super().__init__(None)
+    def __init__(self, type_supplier: collections.abc.Callable, screen_dims: np.ndarray):
+        super().__init__()
         self.last_img = None
         self.last_label = None
+        self.type_supplier = type_supplier
+        # You could also make this dynamic like 'img' and 'label' if needed
+        self.screen_dims = screen_dims
 
     @pyqtSlot(np.ndarray)
     def set_last_label(self, label: np.ndarray):
@@ -78,5 +80,5 @@ class GazeSampleMuxer(QObject):
     def set_last_img(self, img: np.ndarray):
         self.last_img = img
         
-        sample = GazeSample(None, self.last_img, None, self.last_label)
+        sample = GazeSample(self.type_supplier(), self.last_label, self.screen_dims, None, self.last_img)
         self.new_sample.emit(sample)
