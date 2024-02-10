@@ -1,7 +1,6 @@
 import numpy as np
 import time
 import random
-import ctypes
 import win32api
 from PyQt6.QtCore import pyqtSlot, QMutex
 
