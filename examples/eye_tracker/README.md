@@ -98,26 +98,26 @@ graph TD;
     load_sample_coll[Load Sample Collection]
     save_sample_coll[Save Sample Collection]
     overlay[Overlay]
-    as_train_sample[To tensor &#40train/val/test&#41]
-    as_inference_sample[To tensor &#40inference&#41]
-    sample_filter(More than 1 second passed since last save?\nAND\nDoes sample have ground truth &#40i.e. 'y'&#41?)
+    as_train_sample["To tensor (train/val/test)"]
+    as_inference_sample["To tensor (inference)"]
+    sample_filter("More than 1 second passed since last save?\nAND\nDoes sample have ground truth (= 'y')?")
 
     img_src-->|image|sample_muxer
     gt_src-->|ball position|sample_muxer
     gt_src-->|ball position|overlay
     sample_muxer-->|gaze sample|gaze_to_face_convertor
     gaze_to_face_convertor-->|face sample|sample_filter
-    sample_filter-.->|&#60if yes&#62: face sample|save_sample_coll
-    sample_filter-.->|&#60if yes&#62: face sample|as_train_sample
+    sample_filter-.->|"[if yes]: face sample"|save_sample_coll
+    sample_filter-.->|"[if yes]: face sample"|as_train_sample
     gaze_to_face_convertor-->|face sample|as_inference_sample
     save_sample_coll-->|csv & images|disk_output
     disk_input-->|csv & images|load_sample_coll
     load_sample_coll-->|face sample|as_train_sample
-    as_train_sample-->|&#40sample, X, y&#41|model_cntrl
-    as_train_sample-->|&#40sample, None&#41|gt_src
-    as_inference_sample-->|&#40sample, X&#41|model_cntrl
+    as_train_sample-->|"(sample, X, y)"|model_cntrl
+    as_train_sample-->|"(sample, None)"|gt_src
+    as_inference_sample-->|"(sample, X)"|model_cntrl
     model_cntrl<-->model_ele
-    model_ele-->|&#40sample, loss&#41|gt_src
+    model_ele-->|"(sample, loss)"|gt_src
     model_ele-->|predicted values inference|overlay
 ```
 
