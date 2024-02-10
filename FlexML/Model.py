@@ -137,6 +137,7 @@ class ModelElement(QObject):
 
         # Checkpoint model
         if self.epoch % ModelElement.SAVE_EVERY_N_EPOCH == 0:
+            self.model_path.mkdir(parents=True, exist_ok=True)
             torch.save(
                 {
                     'epoch': self.epoch,

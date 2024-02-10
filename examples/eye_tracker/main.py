@@ -21,7 +21,7 @@ from FlexML.Linker import link_QObjects
 
 from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
 from examples.eye_tracker.src.TargetSource import SimpleBallSourceThread, FeedbackBallSourceThread
-from examples.eye_tracker.src.FaceSample import GazeToFaceSampleConvertor
+from examples.eye_tracker.src.FaceSample import GazeToFaceSamplesConvertor
 from examples.eye_tracker.src.FaceNetwork import FaceSampleToTrainPair, FaceSampleToInferencePair
 from examples.eye_tracker.src.GazeSample import GazeSampleMuxer
 from examples.eye_tracker.src.FaceSample import FaceSampleCollection
@@ -53,7 +53,7 @@ DATASET_CONFIGS = [
     }
 ]
 
-logging.getLogger().setLevel(logging.INFO)
+logging.getLogger().setLevel(logging.DEBUG)
 
 parser = ArgumentParser(description="Overlay script parameters")
 parser.add_argument("--load_datasets", type=str, nargs="*", default=None)
@@ -70,7 +70,7 @@ module_directory = Path(__file__).resolve().parent
 # TODO: this is windows only I think?
 screen_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
 
-# TODO: proper
+logging.debug("Creatinig the application based on if we need a GUI or not")
 if args.gt_source or args.img_source or args.inference:
     logging.debug("Using a GUI")
     app = QApplication(sys.argv)
@@ -80,7 +80,7 @@ else:
     app = QCoreApplication(sys.argv)
     overlay = None
 
-# Create model thread
+logging.debug("Creating and linking model_element and model_controller")
 if args.model:
     model_path = module_directory / Path("models") / args.model
     pth_path = max(model_path.glob("epoch_*.pth"), default=None)
@@ -91,7 +91,6 @@ if args.model:
     else:
         logging.info("Creating new model")
         checkpoint = None
-        model_path.mkdir(parents=True, exist_ok=True)
 
     model = FaceNetwork().to(args.device)
     model_element = ModelElement(
@@ -105,10 +104,12 @@ if args.model:
     )
     model_controller = ModelController(model_element)
     model_element.moveToThread(model_controller)
+    link_QObjects(model_controller, model_element)
 else:
     model_controller = None
     model_element = None
 
+logging.debug("Creating and linking live data sources")
 def get_source_worker(uid: str|None):
     if uid is None:
         return None
@@ -123,11 +124,13 @@ def get_source_worker(uid: str|None):
 gt_src_thread = get_source_worker(args.gt_source) 
 img_src_thread = get_source_worker(args.img_source)
 sample_muxer = GazeSampleMuxer(TYPE_SUPPLIER, screen_dims)
+link_QObjects(gt_src_thread, ("register_gt_position", overlay))
+link_QObjects(gt_src_thread,  ("set_last_label", sample_muxer))
+link_QObjects(img_src_thread, ("set_last_img",   sample_muxer))
 
-
-
+logging.debug("Creating and linking sample processing logic")
 sample_buffer = BufferThread(queue.Queue(5))
-gaze_to_face_sample = GazeToFaceSampleConvertor(module_directory / "shape_predictor_68_face_landmarks.dat")
+gaze_to_face_sample = GazeToFaceSamplesConvertor(module_directory / "shape_predictor_68_face_landmarks.dat")
 gaze_to_face_sample.moveToThread(sample_buffer)
 face_sample_to_train_pair = FaceSampleToTrainPair(args.device)
 # Enfore some time between samples to prevent:
@@ -145,13 +148,7 @@ def new_train_samples_filter_func(filtr, sample):
         return True
     return False
 new_train_samples = Filter(new_train_samples_filter_func)
-link_QObjects(gaze_to_face_sample, new_train_samples)
-
-# Live pipeline
-link_QObjects(gt_src_thread,  ("set_last_label", sample_muxer))
-link_QObjects(img_src_thread, ("set_last_img",   sample_muxer), sample_buffer, gaze_to_face_sample)
-link_QObjects(model_controller, (model_element, "inference_results"), ("register_inference_positions", overlay))
-link_QObjects(gt_src_thread, ("register_gt_position", overlay))
+link_QObjects(sample_muxer, sample_buffer, gaze_to_face_sample, new_train_samples)
 
 # TODO: kinda hacky
 if isinstance(gt_src_thread, FeedbackBallSourceThread):
@@ -171,17 +168,18 @@ if args.train:
 if args.inference:
     face_sample_to_inference_pair = FaceSampleToInferencePair(args.device)
     link_QObjects(gaze_to_face_sample, face_sample_to_inference_pair, model_controller)
+    link_QObjects((model_element, "inference_results"), ("register_inference_positions", overlay))
 
 # Save data to disk
 if args.save_dataset:
     save_path = module_directory / Path("datasets") / args.save_dataset
     logging.info(f"Saving new samples in: {save_path}")
     save_coll = FaceSampleCollection(module_directory / Path("datasets") / args.save_dataset)
-    link_QObjects( new_train_samples, save_coll)
+    link_QObjects(new_train_samples, save_coll)
 else:
     logging.info("Not saving new samples")
 
-# Load all data from disk
+logging.debug("Loading all data from disk")
 if args.load_datasets:
     if not args.train:
         logging.warn("Load_dataset(s) passed without enabling training: ignoring the load dataset(s)")
@@ -199,23 +197,23 @@ if args.load_datasets:
 else:
     logging.info("Not loading any datasets")
 
+logging.debug("Starting the model controller")
 if model_controller:
     model_controller.start()
 
-# Start live sources
+logging.debug("Starting all live sources")
 if img_src_thread:
     img_src_thread.start()
 if gt_src_thread:
     gt_src_thread.start()
 
-# Event loop
+logging.debug("Starting event loop")
 if overlay:
-    logging.info("Starting default event loop")
     sys.exit(app.exec())
 else:
     # TODO: this is a hack to avoid calling "app.exec()" which prevents you from interupting (w/ "CTRL+C") when there is no GUI.
     # There is probably a better way to do this.
-    logging.info("Starting headless event loop")
+    logging.info("Using headless event loop")
     global quiting
     quiting = False
     signal.signal(signal.SIGINT, lambda _, __: globals().update({'quitting': True}))
