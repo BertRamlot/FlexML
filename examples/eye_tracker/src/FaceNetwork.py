@@ -34,12 +34,12 @@ def face_sample_to_X_tensor(sample: FaceSample, device):
     # TODO: do this another way
     screen_max_dim = max(sample.get_img()[:2].shape)
     rel_features = sample.features / screen_max_dim
-    face_rel_tl_xy = np.min(sample.features, axis=0) / screen_max_dim
+    face_rel_tl_yx = np.min(sample.features, axis=0) / screen_max_dim
     face_rel_wh = np.array(sample.get_face_img().shape[:2]) / screen_max_dim
     eyes_center = sample.features[36:48].mean(axis=0) / screen_max_dim
 
     tensor_vals.append(torch.Tensor(rel_features).flatten())
-    tensor_vals.append(torch.Tensor(face_rel_tl_xy).flatten())
+    tensor_vals.append(torch.Tensor(face_rel_tl_yx).flatten())
     tensor_vals.append(torch.Tensor(face_rel_wh).flatten())
     tensor_vals.append(torch.Tensor(eyes_center).flatten())
     
@@ -101,8 +101,8 @@ class FaceNetwork(nn.Module):
     def forward(self, x):
         eye_size = FaceSample.EYE_DIMENSIONS.prod()
 
-        left_eye_input = x[:,:eye_size].reshape(-1,1,*FaceSample.EYE_DIMENSIONS)
-        right_eye_input = x[:,eye_size:2*eye_size].reshape(-1,1,*FaceSample.EYE_DIMENSIONS)
+        left_eye_input = x[:,:eye_size].reshape(-1, 1, *FaceSample.EYE_DIMENSIONS)
+        right_eye_input = x[:,eye_size:2*eye_size].reshape(-1, 1, *FaceSample.EYE_DIMENSIONS)
 
         main_input = [self.left_eye_stack(left_eye_input), self.right_eye_stack(right_eye_input)]
         if self.metadata_size > 0:

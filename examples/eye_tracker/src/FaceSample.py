@@ -25,8 +25,8 @@ class FaceSample(GazeSample):
         return super().get_metadata() + [self.face_id] + list(self.features.flatten())
 
     def get_face_img(self) -> np.ndarray:
-        min_x, min_y = self.features.min(axis=0)
-        max_x, max_y = self.features.max(axis=0)
+        min_y, min_x = self.features.min(axis=0)
+        max_y, max_x = self.features.max(axis=0)
         return self.get_img()[min_y:max_y, min_x:max_x]
 
     def get_eye_img(self, eye_type: str) -> np.ndarray:
@@ -37,20 +37,17 @@ class FaceSample(GazeSample):
         else:
             raise RuntimeError("Invalid eye_type:", eye_type)
         
-        min_real_x, min_real_y = self.features[idx:idx+6].min(axis=0)
-        max_real_x, max_real_y = self.features[idx:idx+6].max(axis=0)
-        real_eye_dims = np.array([max_real_y - min_real_y, max_real_x - min_real_x])
-
+        real_eye_dims = self.features[idx:idx+6].max(axis=0) - self.features[idx:idx+6].min(axis=0)
         if (real_eye_dims > 2.0 * FaceSample.EYE_DIMENSIONS).all():
             logging.warn(f"Real eye size is much larger than model size, consider changing 'FaceSample.EYE_DIMENSIONS' to approx: {real_eye_dims}")
         elif (real_eye_dims < 0.3 * FaceSample.EYE_DIMENSIONS).all():
             logging.warn(f"Real eye size is much smaller than model size, consider changing 'FaceSample.EYE_DIMENSIONS' to approx: {real_eye_dims}")
+        
         center = np.round(self.features[idx:idx+6].mean(axis=0)).astype(np.int32)
-        min_crop_x, min_crop_y = center - FaceSample.EYE_DIMENSIONS//2
-        max_crop_x, max_crop_y = center - FaceSample.EYE_DIMENSIONS//2 + FaceSample.EYE_DIMENSIONS
+        min_crop_y, min_crop_x = center - FaceSample.EYE_DIMENSIONS//2
+        max_crop_y, max_crop_x = center - FaceSample.EYE_DIMENSIONS//2 + FaceSample.EYE_DIMENSIONS
 
         img = self.get_img()
-        print(min_crop_x, min_crop_y, max_crop_x, max_crop_y, img[min_crop_y:max_crop_y, min_crop_x:max_crop_x].shape)
         return img[min_crop_y:max_crop_y, min_crop_x:max_crop_x]
 
 class FaceSampleCollection(GazeSampleCollection):
@@ -64,7 +61,7 @@ class FaceSampleCollection(GazeSampleCollection):
         return FaceSample(gaze_sample, face_id, features)
 
     def get_metadata_headers(self) -> list[str]:
-        feature_headers = ["face_id"] + [f"f{axis}_{i}" for i in range(68) for axis in ["x", "y"]]
+        feature_headers = ["face_id"] + [f"f{axis}_{i}" for i in range(68) for axis in ["y", "x"]]
         return super().get_metadata_headers() + feature_headers
 
 class GazeToFaceSamplesConvertor(QObject):
@@ -85,10 +82,10 @@ class GazeToFaceSamplesConvertor(QObject):
         features_per_face = []
         for face_box in face_boxes:
             landmarks = self.face_feature_predictor(gray_img, box=face_box)
-            face_features = np.array([[p.x, p.y] for p in landmarks.parts()])
+            face_features = np.array([[p.y, p.x] for p in landmarks.parts()])
             features_per_face.append(face_features)
 
-        features_per_face.sort(key=lambda features: features[:, 0].mean())
+        features_per_face.sort(key=lambda features: features[:, 1].mean())
         for i, face_features in enumerate(features_per_face):
             # TODO: This isn't proper face detection, the face_id is just the x position order of the face. This does work pretty well though.
             self.face_samples.emit(FaceSample(sample, i, face_features))
