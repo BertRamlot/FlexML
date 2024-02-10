@@ -1,5 +1,4 @@
 import pandas as pd
-import csv
 from pathlib import Path
 from PyQt6.QtCore import pyqtSlot
 
