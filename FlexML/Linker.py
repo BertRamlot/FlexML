@@ -48,24 +48,25 @@ def link_QObjects(*elements: QObject | tuple[str, QObject] | tuple[QObject, str]
 
     Args:
         elements: List of elements to link. Each element can be any of the following formats:
-        - QObject instance
-        - (QObject instance, signal name)
-        - (slot name, QObject instance)
-        - (slot name, QObject instance, signal name)
+        - None or QObject instance
+        - (None or QObject instance, signal name)
+        - (slot name, None or QObject instance)
+        - (slot name, None or QObject instance, signal name)
     """
     # Unify input
     unified_elements = []
     for ele in elements:
-        if ele is None:
-            slot_name, qobject, signal_name = None, None, None
-        elif isinstance(ele, QObject):
+        if ele is None or isinstance(ele, QObject):
             slot_name, qobject, signal_name = None, ele, None
-        elif isinstance(ele, tuple) and len(ele) == 3 and isinstance(ele[0], str) and isinstance(ele[1], QObject) and isinstance(ele[2], str):
-            slot_name, qobject, signal_name = ele
-        elif isinstance(ele, tuple) and len(ele) == 2 and isinstance(ele[0], QObject) and isinstance(ele[1], str):
-            slot_name, qobject, signal_name = None, *ele
-        elif isinstance(ele, tuple) and len(ele) == 2 and isinstance(ele[0], str) and isinstance(ele[1], QObject):
-            slot_name, qobject, signal_name = *ele, None
+        elif isinstance(ele, tuple):
+            if len(ele) == 3 and isinstance(ele[0], str) and (ele[1] is None or isinstance(ele[1], QObject)) and isinstance(ele[2], str):
+                slot_name, qobject, signal_name = ele
+            elif len(ele) == 2 and (ele[0] is None or isinstance(ele[0], QObject)) and isinstance(ele[1], str):
+                slot_name, qobject, signal_name = None, *ele
+            elif len(ele) == 2 and isinstance(ele[0], str) and (ele[1] is None or isinstance(ele[1], QObject)):
+                slot_name, qobject, signal_name = *ele, None
+            else:
+                raise ValueError("Invalid tuple format:", ele)
         else:
             raise ValueError("Invalid element format:", ele)
         unified_elements.append((slot_name, qobject, signal_name))
@@ -76,7 +77,7 @@ def link_QObjects(*elements: QObject | tuple[str, QObject] | tuple[QObject, str]
         rcv_slot_name, rcv_obj, _ = unified_elements[i+1]
 
         if send_obj is None or rcv_obj is None:
-            logging.info(f"Skipping connection between {send_obj} and {rcv_obj}")
+            logging.debug(f"Skipping connection between {send_obj} and {rcv_obj}")
             continue
 
         signals = get_non_pyqt_methods(send_obj, QMetaMethod.MethodType.Signal, send_signal_name)
