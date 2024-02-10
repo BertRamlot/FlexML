@@ -16,8 +16,8 @@ def face_sample_to_X_tensor(sample: FaceSample, device):
         processed_img = img
         processed_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2GRAY)
         return np.asarray(processed_img)/255.0
-    left_eye_tensor = torch.from_numpy(pre_process_img(sample.get_eye_im("left"))).float()
-    right_eye_tensor = torch.from_numpy(pre_process_img(sample.get_eye_im("right"))).float()
+    left_eye_tensor = torch.from_numpy(pre_process_img(sample.get_eye_img("left"))).float()
+    right_eye_tensor = torch.from_numpy(pre_process_img(sample.get_eye_img("right"))).float()
 
     """
     cv2.imshow("FULL", sample.get_img())
