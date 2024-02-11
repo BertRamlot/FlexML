@@ -38,6 +38,7 @@ class WebcamSourceThread(SourceThread):
     def __init__(self, timeout: int, index: int = 0):
         super().__init__(timeout)
         logging.info(f"Starting webcam capture (index={index}) ...")
+        # TODO: check if the webcam actually works/exists
         self.cap = cv2.VideoCapture(index, cv2.CAP_DSHOW)
         logging.info(f"Finished starting webcam capture (index={index})")
 

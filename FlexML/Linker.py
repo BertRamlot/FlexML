@@ -89,7 +89,7 @@ def link_QObjects(*elements: QObject | tuple[str, QObject] | tuple[QObject, str]
                 logging.error(f"Failed to link (no match found) between {send_obj} and {rcv_obj}")
                 continue
             elif len(matching_slots) > 1:
-                logging.warn(f"Multiple valid signal/slot combinations found between {send_obj} and {rcv_obj}")
+                logging.warning(f"Multiple valid signal/slot combinations found between {send_obj} and {rcv_obj}")
 
             slot_method = matching_slots[0]
             logging.debug(f"Connecting {signal_method} with {slot_method}")

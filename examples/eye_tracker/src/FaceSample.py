@@ -13,7 +13,7 @@ class FaceSample(GazeSample):
 
     # TODO: This is hard coded, would be nice if the model would adaptively change
     # E.g. if you detect that the average eye dimension is substantially different from the current EYE_DIMENSIONS,
-    #      you could set the new EYE_DIMENSIONS, retrain the model, ...
+    #      you could set the new EYE_DIMENSIONS and retrain the model
     EYE_DIMENSIONS = np.array([24, 60]) # [y, x]
 
     def __init__(self, sample: GazeSample, face_id: int, features: np.ndarray):
@@ -39,9 +39,9 @@ class FaceSample(GazeSample):
         
         real_eye_dims = self.features[idx:idx+6].max(axis=0) - self.features[idx:idx+6].min(axis=0)
         if (real_eye_dims > 2.0 * FaceSample.EYE_DIMENSIONS).all():
-            logging.warn(f"Real eye size is much larger than model size, consider changing 'FaceSample.EYE_DIMENSIONS' to approx: {real_eye_dims}")
+            logging.warning(f"Real eye size is much larger than model size, consider changing 'FaceSample.EYE_DIMENSIONS' to approx: {real_eye_dims}")
         elif (real_eye_dims < 0.3 * FaceSample.EYE_DIMENSIONS).all():
-            logging.warn(f"Real eye size is much smaller than model size, consider changing 'FaceSample.EYE_DIMENSIONS' to approx: {real_eye_dims}")
+            logging.warning(f"Real eye size is much smaller than model size, consider changing 'FaceSample.EYE_DIMENSIONS' to approx: {real_eye_dims}")
         
         center = np.round(self.features[idx:idx+6].mean(axis=0)).astype(np.int32)
         min_crop_y, min_crop_x = center - FaceSample.EYE_DIMENSIONS//2

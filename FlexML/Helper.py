@@ -15,6 +15,7 @@ class BufferThread(QThread):
     @pyqtSlot(object)
     def push(self, item):
         try:
+            # TODO: cause infite recursions if condition is right
             self._queue.put_nowait(item)
         except queue.Full:
             pass

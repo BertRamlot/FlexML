@@ -9,7 +9,7 @@ from FlexML.SourceThread import SourceThread
 
 
 class SimpleBallSourceThread(SourceThread):
-    """Ball that moves straight at a constant speed. When touching the edge of the screen, it bounces in a random direction."""
+    """Ball that moves straight at a constant speed. When touching the edge of the screen, it bounces in a random direction that biased towards the sides."""
 
     def __init__(self, screen_dims: np.ndarray, timeout: int):
         super().__init__(timeout)
@@ -17,7 +17,7 @@ class SimpleBallSourceThread(SourceThread):
 
         self.ball_time = None
         self.ball_pos = self.screen_dims/2.0
-        self.ball_vel = np.array([self.screen_dims[0]/5.0, self.screen_dims[1]/10.0])*10.0
+        self.ball_vel = np.array([self.screen_dims[0]/5.0, self.screen_dims[1]/10.0])
 
     def get(self) -> tuple[bool, np.ndarray]:
         now_time = time.time()
@@ -37,7 +37,6 @@ class SimpleBallSourceThread(SourceThread):
                     # Corner hit, choice random side
                     out_of_bounds_state[random.getrandbits(1)] = 0
 
-                print(out_of_bounds_state)
                 if out_of_bounds_state[0] == -1: # Top hit
                     base_angle = np.pi
                     clock_wise = (self.ball_vel < 0).all()
@@ -164,6 +163,5 @@ class ClickListenerSourceThread(SourceThread):
                 break
         self.button_states = new_button_states
         
-        # TODO: is this x,y or y,x
-        screen_pos = np.array(win32api.GetCursorPos())
-        return (button != -1, *screen_pos)
+        x, y = win32api.GetCursorPos()
+        return (button != -1, y, x)
