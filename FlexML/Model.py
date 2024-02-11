@@ -1,8 +1,8 @@
 import logging
+import collections
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset
-from torch import nn
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -10,31 +10,9 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
     logging.info("Tensorboard not found")
-from PyQt6.QtCore import QThread, QObject, QMutex, pyqtSignal, pyqtSlot, QWaitCondition, QEventLoop
+from PyQt6.QtCore import QThread, QObject, QMutex, pyqtSignal, pyqtSlot, QWaitCondition
 
 from FlexML.Sample import Sample
-
-def epoch_report(tb_writer, epoch, losses, datasets):
-    # losses: { 'data_type': { 'loss_fn_name': 0.001 } }
-    loss_function_ids = []
-    for loss_fn_dict in losses.values():
-        loss_function_ids += list(loss_fn_dict.keys())
-    loss_function_ids = set(loss_function_ids)
-
-    for loss_function_id in loss_function_ids:
-        dict = {}
-        for dataset_type in losses.keys():
-            if loss_function_id in losses[dataset_type]:
-                dict[dataset_type] = losses[dataset_type][loss_function_id]
-        if tb_writer:
-            tb_writer.add_scalars(f'{loss_function_id}_loss', dict, epoch)
-
-    dataset_type_order = list(datasets.keys())
-    dataset_sizes = [f"{len(datasets[dataset_type]):4}" for dataset_type in dataset_type_order]
-    criterion_loss_strings = [f"{dataset_type}={losses[dataset_type]['criterion']:.4f}" for dataset_type in dataset_type_order]
-
-
-    logging.info(f"{epoch:6} | samples ({' '.join(dataset_type_order)}): {' '.join(dataset_sizes)} | losses: {', '.join(criterion_loss_strings)}")
 
 
 class DynamicDataset(Dataset):
@@ -51,7 +29,7 @@ class DynamicDataset(Dataset):
         # https://stackoverflow.com/questions/70369070/can-a-pytorch-dataloader-start-with-an-empty-dataset
         return max(1, len(self.input_label_pairs))
 
-    def __getitem__(self, idx) -> (np.ndarray, np.ndarray):
+    def __getitem__(self, idx) -> tuple[np.ndarray, np.ndarray]:
         # TODO: this error when size is 0, see the "__len__" comment.
         return self.input_label_pairs[idx]
     
@@ -68,30 +46,31 @@ class ModelElement(QObject):
     inference_results = pyqtSignal(list, np.ndarray)
     sample_errors = pyqtSignal(list, np.ndarray)
 
+    # TODO: hard coded
     SAVE_EVERY_N_EPOCH = 50
 
-    def __init__(self, model: nn.Module, optimizer: torch.optim.Optimizer, checkpoint, model_path: str, device: str, dataset_configs: list, loss_functions):
-        """
-        the loss function used for training is named "criterion"
-        """
+    def __init__(self, model: torch.nn.Module, optimizer: torch.optim.Optimizer, checkpoint, model_path: str, 
+                 device: str, dataset_configs: list[dict[str, object]], loss_functions: dict[str, collections.abc.Callable]):
         super().__init__()
         
         self.epoch = 0
         self.model = model
         self.optimizer = optimizer
-        self.model_path = model_path
-        self.device = device
-        self.loss_functions = loss_functions
-        if "criterion" not in loss_functions:
-            logging.warn("No loss function found named 'criterion', training epochs will not have an effect")
-        self.tb_writer = SummaryWriter(self.model_path / "logs") if TENSORBOARD_FOUND else None
-
         if checkpoint:
             self.epoch = checkpoint["epoch"]
             self.model.load_state_dict(checkpoint['model_state_dict'])
-            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])        
+        self.model_path = model_path
+        self.device = device
+        self.loss_functions = loss_functions
+        if "criterion" in loss_functions:            
+            self.model.train()
+        else:
+            logging.warning("No loss function found named 'criterion' => training epochs will not have an effect")
+            self.model.eval()
         
-        self.model.eval()
+        self.tb_writer = SummaryWriter(self.model_path / "logs") if TENSORBOARD_FOUND else None
+
 
         self.datasets: dict[str, DynamicDataset] = {}
         self.data_loaders: dict[str, DataLoader] = {}
@@ -104,36 +83,43 @@ class ModelElement(QObject):
             self.data_loaders[type] = DataLoader(dataset, **config["dataloader_kwargs"])
 
     @pyqtSlot()
-    def run_epoch(self) -> dict:
-        all_losses = {}
-        for type, data_loader in self.data_loaders.items():
+    def run_epoch(self) -> dict:            
+        # Do epoch, start with the training dataset as this changes the model
+        dataset_losses = {}
+        for type, data_loader in sorted(self.data_loaders.items(), key=lambda t: t[0] == "train", reverse=True):
             do_grad = (type == "train")
-            losses = { name: 0.0 for name in self.loss_functions }
+            losses = { loss_fn_name: 0.0 for loss_fn_name in self.loss_functions }
             with torch.set_grad_enabled(do_grad):
                 for sample_indices, X, y in data_loader:
                     X = X.to(self.device, non_blocking=True)
                     y = y.to(self.device, non_blocking=True)
                     samples = [self.datasets[type].get_sample(index) for index in sample_indices]
                     output = self.model(X)
-                    for name, loss_fn in self.loss_functions.items():
-                        loss = loss_fn(output, y)
+                    for loss_fn_name, loss_fn in self.loss_functions.items():
+                        loss = loss_fn(y, output)
                         loss_mean = loss.mean()
-                        losses[name] += loss_mean.item()
-                        if name == "criterion":
+                        losses[loss_fn_name] += loss_mean.item()
+                        if loss_fn_name == "criterion":
                             loss_per_sample = loss.cpu().detach().numpy()
                             self.sample_errors.emit(samples, loss_per_sample)
                             if do_grad:
                                 self.optimizer.zero_grad()
                                 loss_mean.backward()
                                 self.optimizer.step()
-
-            for name in losses:
-                losses[name] /= len(data_loader)
-
-            all_losses[type] = losses
+            dataset_losses[type] = { loss_fn_name: losses[loss_fn_name] / len(data_loader) for loss_fn_name in losses }
         
         # Report results
-        epoch_report(self.tb_writer, self.epoch, all_losses, self.datasets)
+        if self.tb_writer:
+            for loss_fn_name in self.loss_functions:
+                loss_fn_epoch_losses = { type: dataset_losses[type][loss_fn_name] for type in dataset_losses.keys() }
+                self.tb_writer.add_scalars(f'{loss_fn_name}_loss', loss_fn_epoch_losses, self.epoch)
+
+        dataset_type_order = list(self.datasets.keys())
+        dataset_sizes_strings = [f"{len(self.datasets[type]):4}" for type in dataset_type_order]
+        criterion_loss_strings = [f"{type}={dataset_losses[type]['criterion']:.4f}" for type in dataset_type_order]
+
+        logging.info("epoch: {:5} | samples ({}): {} | losses: {}".format(
+            self.epoch, ' '.join(dataset_type_order), ' '.join(dataset_sizes_strings), ', '.join(criterion_loss_strings)))
 
         # Checkpoint model
         if self.epoch % ModelElement.SAVE_EVERY_N_EPOCH == 0:
@@ -147,7 +133,7 @@ class ModelElement(QObject):
                 self.model_path / f"epoch_{self.epoch:0>6}.pth"
             )
         self.epoch += 1
-        return all_losses
+        return dataset_losses
 
     @pyqtSlot(list, torch.Tensor)
     def run_inference(self, samples: list[Sample], input_tensor: torch.Tensor):
@@ -155,34 +141,35 @@ class ModelElement(QObject):
             predictions = self.model(input_tensor).cpu().detach().numpy()
             self.inference_results.emit(samples, predictions)
 
-
 class ModelController(QThread):
     inference_request = pyqtSignal(list, torch.Tensor)
 
-    def __init__(self, model_element: ModelElement):
+    def __init__(self, model_element: ModelElement, initial_train_samples_req_before_training: int):
         super().__init__()
         self.model_element = model_element
+        if "train" not in self.model_element.datasets:
+            logging.warning("No 'train' dataset found, model controller will not train.")
+        if "val" not in self.model_element.datasets:
+            logging.warning("No 'val' dataset found, model controller will keep training once started.")
 
-        self.inference_queue = []
-        self.new_samples = []
+        self.inference_queue: list[tuple[Sample, torch.Tensor]] = []
+        self.new_samples: list[tuple[Sample, torch.Tensor, torch.Tensor]] = []
 
-        # TODO: Make sure the dataset has atleast N ele per
-        self.wait_train_for_n_samples = 50
+        self.pause_training_till_n_train_samples = initial_train_samples_req_before_training
 
         self.mutex = QMutex()
         self.condition = QWaitCondition()
 
     def run(self):
-        loss_per_epoch = []
+        val_loss_per_epoch = []
         while True:
-            inference_items = []
+            # Wait for something to do
             self.mutex.lock()
-            while not self.inference_queue and not self.new_samples and self.wait_train_for_n_samples:
+            while not self.inference_queue and not self.new_samples and self.pause_training_till_n_train_samples:
                 self.condition.wait(self.mutex)        
             inference_items, self.inference_queue = self.inference_queue, []
             new_samples, self.new_samples = self.new_samples, []
             self.mutex.unlock()
-
             # Do inference
             if len(inference_items) > 0:
                 samples = [item[0] for item in inference_items]
@@ -193,26 +180,24 @@ class ModelController(QThread):
             for sample, X, y in new_samples:
                 self.model_element.datasets[sample.type].add_pair(sample, X, y)
                 if sample.type == "train":
-                    self.wait_train_for_n_samples = max(0, self.wait_train_for_n_samples -1)
-            if self.wait_train_for_n_samples > 0:
+                    self.pause_training_till_n_train_samples = max(0, self.pause_training_till_n_train_samples - 1)
+            if self.pause_training_till_n_train_samples > 0:
                 continue
 
             # Wait for new samples
-            if len(loss_per_epoch) > 50:
-                avg_less_recent_loss = np.array(loss_per_epoch[-50:-25]).mean()
-                avg_recent_loss = np.array(loss_per_epoch[-25:]).mean()
+            if len(val_loss_per_epoch) > 50:
+                avg_recent_loss = np.array(val_loss_per_epoch[-25:]).mean()
+                avg_less_recent_loss = np.array(val_loss_per_epoch[-50:-25]).mean()
                 if avg_less_recent_loss < avg_recent_loss:
-                    loss_per_epoch = []
-                    self.wait_train_for_n_samples = int(0.3 * len(self.model_element.datasets["train"]))
-                    logging.info(f"Waiting for {self.wait_train_for_n_samples} training samples ...")
+                    val_loss_per_epoch = []
+                    self.pause_training_till_n_train_samples = int(0.3 * len(self.model_element.datasets["train"]))
+                    logging.info(f"Waiting for {self.pause_training_till_n_train_samples} training samples ...")
                     continue
 
             # Do an epoch
-            if not self.model_element.model.training:
-                self.model_element.model.train()
-            
-            all_losses = self.model_element.run_epoch()
-            loss_per_epoch.append(all_losses["val"]["criterion"])
+            dataset_losses = self.model_element.run_epoch()
+            if "val" in dataset_losses and "criterion" in dataset_losses["val"]:
+                val_loss_per_epoch.append(dataset_losses["val"]["criterion"])
     
     @pyqtSlot(Sample, torch.Tensor)
     def request_inference(self, sample: Sample, X: torch.Tensor):

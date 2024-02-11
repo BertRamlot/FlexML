@@ -27,7 +27,8 @@ from examples.eye_tracker.src.GazeSample import GazeSampleMuxer
 from examples.eye_tracker.src.FaceSample import FaceSampleCollection
 from examples.eye_tracker.src.FaceNetwork import FaceNetwork
 
-
+# Config
+INITIAL_TRAIN_SAMPLES_REQ_BEFORE_TRAINING = 50
 TYPE_SUPPLIER = lambda : random.choices(["train", "val", "test"], [0.8, 0.15, 0.05])[0]
 MIN_TIME_BETWEEN_SAMPLES = 1.0
 LEARNING_RATE = 1e-3
@@ -53,6 +54,7 @@ DATASET_CONFIGS = [
     }
 ]
 
+# Script
 logging.getLogger().setLevel(logging.INFO)
 
 parser = ArgumentParser(description="Overlay script parameters")
@@ -102,7 +104,7 @@ if args.model:
         DATASET_CONFIGS,
         LOSS_FUNCTIONS
     )
-    model_controller = ModelController(model_element)
+    model_controller = ModelController(model_element, INITIAL_TRAIN_SAMPLES_REQ_BEFORE_TRAINING)
     model_element.moveToThread(model_controller)
     link_QObjects(model_controller, model_element)
 else:
@@ -182,7 +184,7 @@ else:
 logging.debug("Loading all data from disk")
 if args.load_datasets:
     if not args.train:
-        logging.warn("Load_dataset(s) passed without enabling training: ignoring the load dataset(s)")
+        logging.warning("Load_dataset(s) passed without enabling training: ignoring the load dataset(s)")
     else:
         total_published_samples = 0
         load_data_colls = [FaceSampleCollection(module_directory / "datasets" / load_dataset_path) for load_dataset_path in args.load_datasets]
