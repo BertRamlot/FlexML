@@ -53,7 +53,7 @@ DATASET_CONFIGS = [
     }
 ]
 
-logging.getLogger().setLevel(logging.DEBUG)
+logging.getLogger().setLevel(logging.INFO)
 
 parser = ArgumentParser(description="Overlay script parameters")
 parser.add_argument("--load_datasets", type=str, nargs="*", default=None)
@@ -68,7 +68,7 @@ args = parser.parse_args(sys.argv[1:])
 
 module_directory = Path(__file__).resolve().parent
 # TODO: this is windows only I think?
-screen_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in range(2)], dtype=np.int32)
+screen_dims = np.array([ctypes.windll.user32.GetSystemMetrics(i) for i in [1, 0]], dtype=np.int32) # [y, x]
 
 logging.debug("Creatinig the application based on if we need a GUI or not")
 if args.gt_source or args.img_source or args.inference:

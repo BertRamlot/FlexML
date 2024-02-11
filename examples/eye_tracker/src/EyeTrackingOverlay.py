@@ -12,11 +12,11 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
 
     def __init__(self, window_dims: np.ndarray):
         super().__init__(flags=QtCore.Qt.WindowType.FramelessWindowHint | QtCore.Qt.WindowType.WindowStaysOnTopHint)
-        self.window_dims = window_dims
+        self.window_dims = window_dims # [h, w]
         self.gt_history = []
         self.inference_history: dict[int, tuple[float, list[np.ndarray]]] = {}
 
-        self.setGeometry(0, 0, *self.window_dims)
+        self.setGeometry(0, 0, self.window_dims[1], self.window_dims[0])
         self.setStyleSheet("background:transparent")
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
         self.showFullScreen()
@@ -61,14 +61,14 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
         outer_ring_color = QtCore.Qt.GlobalColor.yellow
         inner_ring_color = QtCore.Qt.GlobalColor.red
 
-        x, y = position.round().astype(np.int32)
+        y, x = position.round().astype(np.int32)
 
-        r = 8
+        r = 10
         pen = QtGui.QPen(outer_ring_color, 8, QtCore.Qt.PenStyle.SolidLine)
         qp.setPen(pen)
         qp.drawEllipse(x-r, y-r, 2*r, 2*r)
 
-        r = 3
+        r = 5
         pen = QtGui.QPen(inner_ring_color, 2, QtCore.Qt.PenStyle.SolidLine)
         qp.setPen(pen)
         qp.drawEllipse(x-r, y-r, 2*r, 2*r)
@@ -92,7 +92,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
 
             # Draw inference circle
             r = 15
-            x, y = predicted_pos
+            y, x = predicted_pos
             pen.setColor(colors[face_id % len(colors)])
             qp.setPen(pen)
             qp.drawEllipse(x-r, y-r, 2*r, 2*r)

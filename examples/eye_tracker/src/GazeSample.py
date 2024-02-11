@@ -15,7 +15,7 @@ class GazeSample(MetadataSample):
         super().__init__(type, screen_position)
         self.img_path = img_path
         self._img = img
-        self.screen_dims = screen_dims
+        self.screen_dims = screen_dims # [h, w]
 
     def get_img(self) -> np.ndarray:
         if self._img is None:
@@ -26,10 +26,11 @@ class GazeSample(MetadataSample):
     
     def get_metadata(self) -> list:
         if self.gt is None:
-            x, y = (None, None)
+            y, x = (None, None)
         else:
-            x, y = self.gt
-        return [self.img_path.name, self.type, *self.screen_dims, x, y]
+            y, x = self.gt
+        h, w = self.screen_dims
+        return [self.img_path.name, self.type, h, w, y, x]
     
 
 class GazeSampleCollection(MetadataSampleCollection):
@@ -38,12 +39,12 @@ class GazeSampleCollection(MetadataSampleCollection):
         super().__init__(path)
     
     def from_metadata(self, metadata) -> GazeSample:
-        img_name, type, win_x, win_y, pos_x, pos_y = metadata[:6]
+        img_name, type, win_y, win_x, pos_y, pos_x = metadata[:6]
         img_path = self.dataset_path / "raw" / Path(img_name)
-        return GazeSample(type, (pos_x, pos_y), np.array([win_x, win_y]), img_path, None)
+        return GazeSample(type, (pos_y, pos_x), np.array([win_y, win_x]), img_path, None)
     
     def get_metadata_headers(self) -> list[str]:
-        return ["type", "img_name", "win_x", "win_y", "x", "y"]
+        return ["type", "img_name", "win_y", "win_x", "y", "x"]
 
     @pyqtSlot(MetadataSample)
     def add_sample(self, sample: MetadataSample):
