@@ -17,9 +17,9 @@ class SimpleBallSourceThread(SourceThread):
 
         self.ball_time = None
         self.ball_pos = self.screen_dims/2.0
-        self.ball_vel = self.screen_dims/7.0
+        self.ball_vel = np.array([self.screen_dims[0]/5.0, self.screen_dims[1]/10.0])*10.0
 
-    def get(self) -> tuple[bool, tuple[float, float]]:
+    def get(self) -> tuple[bool, np.ndarray]:
         now_time = time.time()
 
         if self.ball_time is None:
@@ -29,13 +29,39 @@ class SimpleBallSourceThread(SourceThread):
             # Update ball properties
             self.ball_time = now_time
             self.ball_pos += self.ball_vel*dt
-            out_of_bounds_mask = (self.ball_pos < 0) | (self.ball_pos > self.screen_dims)
-            self.ball_vel *= np.where(out_of_bounds_mask, -1, 1)
-            self.ball_pos = np.clip(self.ball_pos, 0, self.screen_dims)
-            if out_of_bounds_mask.any():
-                rnd_angle = random.random()*np.pi/2
+            out_of_bounds_state = 1*(self.ball_pos > self.screen_dims) - 1*(self.ball_pos < 0)
+            # self.ball_vel *= np.where(out_of_bounds_state == 0, 1, -1)
+            if (out_of_bounds_state != 0).any():
+                # Bounce logic
+                if (out_of_bounds_state != 0).all():
+                    # Corner hit, choice random side
+                    out_of_bounds_state[random.getrandbits(1)] = 0
+
+                print(out_of_bounds_state)
+                if out_of_bounds_state[0] == -1: # Top hit
+                    base_angle = np.pi
+                    clock_wise = (self.ball_vel < 0).all()
+                elif out_of_bounds_state[1] == 1: # Right hit
+                    base_angle = np.pi * 3.0/2.0
+                    clock_wise = (self.ball_vel[0] < 0) and (self.ball_vel[1] > 0)
+                elif out_of_bounds_state[0] == 1: # Bottom hit
+                    base_angle = 0.0
+                    clock_wise = (self.ball_vel > 0).all()
+                elif out_of_bounds_state[1] == -1: # Left hit
+                    base_angle = np.pi / 2.0
+                    clock_wise = (self.ball_vel[0] > 0) and (self.ball_vel[1] < 0)
+
+                # Random angle is biases towards staying to the sides
+                rnd_angle = (random.random()**2)*np.pi/2
+                if clock_wise:
+                    target_angle = base_angle - rnd_angle
+                else:
+                    target_angle = base_angle + np.pi + rnd_angle
+                
                 vel_mag = np.linalg.norm(self.ball_vel)
-                self.ball_vel = np.copysign(vel_mag * np.array([np.cos(rnd_angle), np.sin(rnd_angle)]), self.ball_vel)
+                self.ball_vel = vel_mag * np.array([np.sin(target_angle), np.cos(target_angle)])
+
+            self.ball_pos = np.clip(self.ball_pos, 0, self.screen_dims)
 
         return (True, self.ball_pos.astype(np.int32))
     
@@ -93,7 +119,6 @@ class FeedbackBallSourceThread(SourceThread):
             total_force /= len(self.error_map)
         self.mutex.unlock()
         total_force += np.random.random((2,))*self.max_speed/10.0
-        # print(over_sample_force.round(), loss_force.round())
         return total_force
 
     def get(self) -> tuple[bool, tuple[float, float]]:
@@ -139,5 +164,6 @@ class ClickListenerSourceThread(SourceThread):
                 break
         self.button_states = new_button_states
         
+        # TODO: is this x,y or y,x
         screen_pos = np.array(win32api.GetCursorPos())
         return (button != -1, *screen_pos)
