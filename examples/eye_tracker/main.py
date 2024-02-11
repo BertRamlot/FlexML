@@ -13,14 +13,14 @@ import torch
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QCoreApplication, QEventLoop, QObject, pyqtSignal, pyqtSlot
 
-from FlexML.SourceThread import WebcamSourceThread
+from FlexML.SourceObject import WebcamSourceObject, SourceObject
 from FlexML.Sample import Sample
 from FlexML.Model import ModelElement, ModelController
 from FlexML.Helper import BufferThread, Filter
 from FlexML.Linker import link_QObjects
 
 from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
-from examples.eye_tracker.src.TargetSource import SimpleBallSourceThread, FeedbackBallSourceThread
+from examples.eye_tracker.src.TargetSource import SimpleBallSourceObject, FeedbackBallSourceObject
 from examples.eye_tracker.src.FaceSample import GazeToFaceSamplesConvertor
 from examples.eye_tracker.src.FaceNetwork import FaceSampleToTrainPair, FaceSampleToInferencePair
 from examples.eye_tracker.src.GazeSample import GazeSampleMuxer
@@ -112,15 +112,15 @@ else:
     model_element = None
 
 logging.debug("Creating and linking live data sources")
-def get_source_worker(uid: str|None):
+def get_source_worker(uid: str|None) -> SourceObject:
     if uid is None:
         return None
     elif uid == "simple-ball":
-        return SimpleBallSourceThread(screen_dims, 0.02)
+        return SimpleBallSourceObject(screen_dims, 0.02)
     elif uid == "feedback-ball":
-        return FeedbackBallSourceThread(screen_dims, 0.02)
+        return FeedbackBallSourceObject(screen_dims, 0.02)
     elif uid == "webcam":
-        return WebcamSourceThread(0.03)
+        return WebcamSourceObject(0.03)
     else:
         raise LookupError("Invalid source worker uid:", uid)
 gt_src_thread = get_source_worker(args.gt_source) 
@@ -153,7 +153,7 @@ new_train_samples = Filter(new_train_samples_filter_func)
 link_QObjects(sample_muxer, sample_buffer, gaze_to_face_sample, new_train_samples)
 
 # TODO: kinda hacky
-if isinstance(gt_src_thread, FeedbackBallSourceThread):
+if isinstance(gt_src_thread, FeedbackBallSourceObject):
     link_QObjects((model_element, "sample_errors"), gt_src_thread)
 
     class TrainPairToSampleLoss(QObject):

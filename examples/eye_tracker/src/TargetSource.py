@@ -5,14 +5,14 @@ import win32api
 from PyQt6.QtCore import pyqtSlot, QMutex
 
 from FlexML.Sample import Sample
-from FlexML.SourceThread import SourceThread
+from FlexML.SourceObject import SourceObject
 
 
-class SimpleBallSourceThread(SourceThread):
+class SimpleBallSourceObject(SourceObject):
     """Ball that moves straight at a constant speed. When touching the edge of the screen, it bounces in a random direction that biased towards the sides."""
 
     def __init__(self, screen_dims: np.ndarray, timeout: int):
-        super().__init__(timeout)
+        super().__init__(timeout, False)
         self.screen_dims = screen_dims
 
         self.ball_time = None
@@ -64,11 +64,11 @@ class SimpleBallSourceThread(SourceThread):
 
         return (True, self.ball_pos.astype(np.int32))
     
-class FeedbackBallSourceThread(SourceThread):
+class FeedbackBallSourceObject(SourceObject):
     """Ball that is drawn pulled towards areas with few samples and/or high errors."""
 
     def __init__(self, screen_dims: np.ndarray, timeout: int):
-        super().__init__(timeout)
+        super().__init__(timeout, False)
         self.screen_dims = screen_dims
 
         self.ball_time = None
@@ -144,11 +144,11 @@ class FeedbackBallSourceThread(SourceThread):
 
         return (True, self.ball_pos.astype(np.int32))
 
-class ClickListenerSourceThread(SourceThread):
+class ClickListenerSourceObject(SourceObject):
     """Records where the mouse clicks."""
 
     def __init__(self, timeout: int, buttons = [1, 2]):
-        super().__init__(timeout)
+        super().__init__(timeout, False)
         self.button_states = { k : 1 for k in buttons}
 
     def get(self) -> tuple[bool, tuple[float, float]]:
