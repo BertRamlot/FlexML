@@ -103,12 +103,6 @@ class WebcamSourceObject(SourceObject):
         self.cap.release()
 
     def get(self) -> tuple[bool, np.ndarray]:
-        """
-        Retrieve a frame from the webcam.
-
-        Returns:
-            tuple[bool, np.ndarray]: A tuple containing a boolean indicating success and the retrieved frame.
-        """
         return self.cap.read()
 
     def is_done(self) -> bool:
@@ -130,12 +124,6 @@ class VideoFileSourceObject(SourceObject):
         self.cap.release()
 
     def get(self) -> tuple[bool, np.ndarray]:
-        """
-        Retrieve a frame from the video file.
-
-        Returns:
-            tuple[bool, np.ndarray]: A tuple containing a boolean indicating success and the retrieved frame.
-        """
         ret, frame = self.cap.read()
         if not ret:
             self.reached_end = True
@@ -148,6 +136,7 @@ class ScreenSourceObject(SourceObject):
     """
     SourceObject that takes screenshots.
     """
+    
     def __init__(self, timeout: int, monitor: dict[str, int] | tuple[int, int, int, int] | None = None):
         super().__init__(timeout, False)
         self.sct = mss.mss()
@@ -157,11 +146,5 @@ class ScreenSourceObject(SourceObject):
         self.sct.close()
 
     def get(self) -> tuple[bool, np.ndarray]:
-        """
-        Retrieve a frame from the screen.
-
-        Returns:
-            tuple[bool, np.ndarray]: A tuple containing a boolean indicating success and the retrieved frame.
-        """
         sct_img = self.sct.grab(self.monitor)
         return True, np.asarray(sct_img)

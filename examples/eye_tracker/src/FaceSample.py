@@ -9,7 +9,9 @@ from examples.eye_tracker.src.GazeSample import GazeSample, GazeSampleCollection
 
 
 class FaceSample(GazeSample):
-    """GazeSample that has extra features that define the contour (incl. eyes, mouth, ...) of a SINGLE face."""
+    """
+    GazeSample that has extra features that define the contour (incl. eyes, mouth, ...) of a SINGLE face.
+    """
 
     # TODO: This is hard coded, would be nice if the model would adaptively change
     # E.g. if you detect that the average eye dimension is substantially different from the current EYE_DIMENSIONS,
@@ -25,11 +27,28 @@ class FaceSample(GazeSample):
         return super().get_metadata() + [self.face_id] + list(self.features.flatten())
 
     def get_face_img(self) -> np.ndarray:
+        """
+        Get the image of the face from the sample.
+
+        Returns:
+            np.ndarray: An array representing the image of the face.
+        """
         min_y, min_x = self.features.min(axis=0)
         max_y, max_x = self.features.max(axis=0)
         return self.get_img()[min_y:max_y, min_x:max_x]
 
     def get_eye_img(self, eye_type: str) -> np.ndarray:
+        """
+        Get the image of the specified eye from the sample.
+
+        Args:
+            eye_type (str): Type of the eye ('left' or 'right').
+
+        Returns:
+            np.ndarray: An array representing the image of the specified eye.
+        Raises:
+            RuntimeError: If an invalid eye_type is provided.
+        """
         if eye_type == "left":
             idx = 36
         elif eye_type == "right":
@@ -65,17 +84,31 @@ class FaceSampleCollection(GazeSampleCollection):
         return super().get_metadata_headers() + feature_headers
 
 class GazeToFaceSamplesConvertor(QObject):
-    """Converts a GazeSample to a number of FaceSamples by running a face detector ('shape_predictor_68_face_landmarks.dat')."""
+    """
+    Converts a GazeSample to 0 or more of FaceSamples by running a face detector and emits those.
+    """
 
     face_samples = pyqtSignal(FaceSample)
 
     def __init__(self, shape_predictor_path: Path):
+        """
+        Initialize a GazeToFaceSamplesConvertor instance.
+
+        Args:
+            shape_predictor_path (Path): The path to the shape predictor file, must be dlib compatible
+        """
         super().__init__()
         self.face_detector = dlib.get_frontal_face_detector()
         self.face_feature_predictor = dlib.shape_predictor(str(shape_predictor_path))
 
     @pyqtSlot(GazeSample)
     def convert_sample(self, sample: GazeSample):
+        """
+        Convert a GazeSample to 0 or more FaceSamples, and emit those.
+
+        Args:
+            sample (GazeSample): The GazeSample to be converted.
+        """
         img = sample.get_img()        
         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         face_boxes = self.face_detector(gray_img)
