@@ -63,11 +63,9 @@ class FaceSample(GazeSample):
             logging.warning(f"Real eye size is much smaller than model size, consider changing 'FaceSample.EYE_DIMENSIONS' to approx: {real_eye_dims}")
         
         center = np.round(self.features[idx:idx+6].mean(axis=0)).astype(np.int32)
-        min_crop_y, min_crop_x = center - FaceSample.EYE_DIMENSIONS//2
-        max_crop_y, max_crop_x = center - FaceSample.EYE_DIMENSIONS//2 + FaceSample.EYE_DIMENSIONS
-
-        img = self.get_img()
-        return img[min_crop_y:max_crop_y, min_crop_x:max_crop_x]
+        min_y, min_x = center - FaceSample.EYE_DIMENSIONS//2
+        max_y, max_x = center - FaceSample.EYE_DIMENSIONS//2 + FaceSample.EYE_DIMENSIONS
+        return self.get_img()[min_y:max_y, min_x:max_x]
 
 class FaceSampleCollection(GazeSampleCollection):
     def __init__(self, path: Path):
@@ -80,8 +78,8 @@ class FaceSampleCollection(GazeSampleCollection):
         return FaceSample(gaze_sample, face_id, features)
 
     def get_metadata_headers(self) -> list[str]:
-        feature_headers = ["face_id"] + [f"f{axis}_{i}" for i in range(68) for axis in ["y", "x"]]
-        return super().get_metadata_headers() + feature_headers
+        extra_headers = ["face_id"] + [f"f{axis}_{i}" for i in range(68) for axis in ["y", "x"]]
+        return super().get_metadata_headers() + extra_headers
 
 class GazeToFaceSamplesConvertor(QObject):
     """
@@ -95,7 +93,7 @@ class GazeToFaceSamplesConvertor(QObject):
         Initialize a GazeToFaceSamplesConvertor instance.
 
         Args:
-            shape_predictor_path (Path): The path to the shape predictor file, must be dlib compatible
+            shape_predictor_path (Path): The path to the shape predictor file, must be dlib compatible.
         """
         super().__init__()
         self.face_detector = dlib.get_frontal_face_detector()
@@ -109,6 +107,7 @@ class GazeToFaceSamplesConvertor(QObject):
         Args:
             sample (GazeSample): The GazeSample to be converted.
         """
+        # Run face detector & feature predictor
         img = sample.get_img()        
         gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         face_boxes = self.face_detector(gray_img)
@@ -118,7 +117,9 @@ class GazeToFaceSamplesConvertor(QObject):
             face_features = np.array([[p.y, p.x] for p in landmarks.parts()])
             features_per_face.append(face_features)
 
+        # Determine face id and emit
+        # TODO: The face id is currently just the x position order of the face, instead of an answer to "Who is this?".
+        #       (This does work pretty well though)
         features_per_face.sort(key=lambda features: features[:, 1].mean())
         for i, face_features in enumerate(features_per_face):
-            # TODO: This isn't proper face detection, the face_id is just the x position order of the face. This does work pretty well though.
             self.face_samples.emit(FaceSample(sample, i, face_features))
