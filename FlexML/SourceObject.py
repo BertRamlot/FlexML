@@ -42,12 +42,12 @@ class SourceObject(QObject):
         if self.is_done():
             if self._timer is not None:
                 self._timer.stop()
-            return False
+            return True
 
         success, item = self.get()
         if success:
             self.new_object.emit(item)
-        return True
+        return False
             
     def start(self):
         if self._timer is not None:
