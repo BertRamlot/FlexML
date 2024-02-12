@@ -137,8 +137,8 @@ face_sample_to_train_pair = FaceSampleToTrainPair(args.device)
 # Enfore some time between samples to prevent:
 # (1) leakage btwn train/val/test datasets
 # (2) too similar samples within a dataset
-def new_train_samples_filter_func(filtr, sample):
-    if sample.gt is None:
+def new_train_samples_filter_func(filtr, sample: Sample):
+    if sample.ground_truth is None:
         return False
     if hasattr(filtr, "last_pass_time"):
         elapsed_since_last_pass = time.time() - filtr.last_pass_time
