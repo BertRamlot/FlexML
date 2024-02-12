@@ -22,7 +22,7 @@ from FlexML.Linker import link_QObjects
 from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
 from examples.eye_tracker.src.TargetSource import SimpleBallSourceObject, FeedbackBallSourceObject, ClickListenerSourceObject
 from examples.eye_tracker.src.FaceSample import GazeToFaceSamplesConvertor
-from examples.eye_tracker.src.FaceNetwork import FaceSampleToTrainPair, FaceSampleToInferencePair
+from examples.eye_tracker.src.FaceNetwork import FaceSampleTensorfier
 from examples.eye_tracker.src.GazeSample import GazeSampleMuxer
 from examples.eye_tracker.src.FaceSample import FaceSampleCollection
 from examples.eye_tracker.src.FaceNetwork import FaceNetwork
@@ -133,11 +133,11 @@ logging.debug("Creating and linking sample processing logic")
 sample_buffer = BufferThread(queue.Queue(5))
 gaze_to_face_sample = GazeToFaceSamplesConvertor(module_directory / "shape_predictor_68_face_landmarks.dat")
 gaze_to_face_sample.moveToThread(sample_buffer)
-face_sample_to_train_pair = FaceSampleToTrainPair(args.device)
+face_sample_tensorfier = FaceSampleTensorfier(args.device)
 # Enfore some time between samples to prevent:
 # (1) leakage btwn train/val/test datasets
 # (2) too similar samples within a dataset
-def new_train_samples_filter_func(filtr, sample: Sample):
+def new_train_samples_filter_func(filtr, sample: Sample) -> bool:
     if sample.ground_truth is None:
         return False
     if hasattr(filtr, "last_pass_time"):
@@ -161,14 +161,13 @@ if isinstance(gt_src_thread, FeedbackBallSourceObject):
         def on_input(self, sample: Sample, _, __):
             self.output.emit([sample], np.array([None]))
     train_pair_to_sample_loss = TrainPairToSampleLoss()
-    link_QObjects(face_sample_to_train_pair, train_pair_to_sample_loss, gt_src_thread)    
+    link_QObjects(face_sample_tensorfier, train_pair_to_sample_loss, gt_src_thread)    
 
 if args.train:
-    link_QObjects(new_train_samples, face_sample_to_train_pair, model_controller)
+    link_QObjects(new_train_samples, ("add_X_y_tensors", face_sample_tensorfier, "train_tuples"), model_controller)
 
 if args.inference:
-    face_sample_to_inference_pair = FaceSampleToInferencePair(args.device)
-    link_QObjects(gaze_to_face_sample, face_sample_to_inference_pair, model_controller)
+    link_QObjects(gaze_to_face_sample, ("add_X_tensor", face_sample_tensorfier, "inference_tuples"), model_controller)
     link_QObjects((model_element, "inference_results"), ("register_predictions", overlay))
 
 # Save data to disk
@@ -188,7 +187,7 @@ if args.load_datasets:
         total_published_samples = 0
         load_data_colls = [FaceSampleCollection(module_directory / "datasets" / load_dataset_path) for load_dataset_path in args.load_datasets]
         for dataset_source in load_data_colls:
-            link_QObjects(dataset_source, face_sample_to_train_pair)
+            link_QObjects(dataset_source, ("add_X_y_tensors", face_sample_tensorfier))
         for dataset_source in load_data_colls:
             sample_count = dataset_source.publish_all_samples()
             logging.info(f"Loaded {sample_count} samples from {dataset_source.dataset_path}")
