@@ -9,7 +9,9 @@ from FlexML.MetadataSample import MetadataSample, MetadataSampleCollection
 
 
 class GazeSample(MetadataSample):
-    """Sample defined by an image (normally just a webcam frame), a screen position, and the corresponding screen dimensions."""
+    """
+    Sample defined by an image (normally just a webcam frame), a screen position, and the corresponding screen dimensions.
+    """
 
     def __init__(self, type: str, screen_position: tuple[int|float, int|float], screen_dims: np.ndarray, img_path: Path | None, img: np.ndarray | None, creation_time: float = None):
         super().__init__(type, screen_position, creation_time)
@@ -18,6 +20,15 @@ class GazeSample(MetadataSample):
         self.screen_dims = screen_dims # [h, w]
 
     def get_img(self) -> np.ndarray:
+        """
+        Retrieves the image data as a numpy array. Loaded from disk using the 'img_path' if not yet loaded.
+
+        Returns:
+            np.ndarray: A numpy array representing the image data.
+                
+        Raises:
+            RuntimeError: If neither '_img' nor 'img_path' has been specified.
+        """
         if self._img is None:
             if self.img_path is None:
                 raise RuntimeError("'_img' or 'img_path' should be specified")
@@ -62,21 +73,43 @@ class GazeSampleCollection(MetadataSampleCollection):
 
         super().add_sample(sample)
 
-class GazeSampleMuxer(QObject):    
+class GazeSampleMuxer(QObject):
+    """
+    Creates and emits GazeSamples from its subcomponents.
+    """
     new_sample = pyqtSignal(GazeSample)
 
     def __init__(self, type_supplier: collections.abc.Callable, screen_dims: np.ndarray):
+        """
+        Initialize the GazeSampleMuxer.
+
+        Args:
+            type_supplier (collections.abc.Callable): A callable object that returns the type for the next sample when called (w/ 0 args).
+            screen_dims (np.ndarray): The dimensions of the screen, shape is (2,) with format (height, width).
+        """
         super().__init__()
         self.last_ground_truth = None
         self.type_supplier = type_supplier
         self.screen_dims = screen_dims
 
     @pyqtSlot(np.ndarray)
-    def set_last_ground_truth(self, last_ground_truth: np.ndarray):
-        self.last_ground_truth = last_ground_truth
+    def update_ground_truth(self, ground_truth: np.ndarray):
+        """
+        Update the last known ground truth position of the gaze.
+
+        Args:
+            ground_truth (np.ndarray): An array representing the last known ground truth position, shape is (2,) with format (y, x)
+        """
+        self.last_ground_truth = ground_truth
     
     @pyqtSlot(np.ndarray)
-    def set_last_img(self, img: np.ndarray):
+    def update_img(self, img: np.ndarray):
+        """
+        Creates and emits a new gaze sample signal using the provided image data.
+
+        Args:
+            img (np.ndarray): An array representing the image data.
+        """
         type = None if self.last_ground_truth is None else self.type_supplier()
         sample = GazeSample(type, self.last_ground_truth, self.screen_dims, None, img)
         self.new_sample.emit(sample)

@@ -126,8 +126,8 @@ gt_src_thread = None if args.gt_source is None else GROUND_TRUTH_SOURCE_SUPPLIER
 img_src_thread = None if args.img_source is None else IMG_SOURCE_SUPPLIERS[args.img_source]()
 sample_muxer = GazeSampleMuxer(TYPE_SUPPLIER, screen_dims)
 link_QObjects(gt_src_thread, ("register_ground_truth", overlay))
-link_QObjects(gt_src_thread,  ("set_last_ground_truth", sample_muxer))
-link_QObjects(img_src_thread, ("set_last_img",   sample_muxer))
+link_QObjects(gt_src_thread,  ("update_ground_truth", sample_muxer))
+link_QObjects(img_src_thread, ("update_img",   sample_muxer))
 
 logging.debug("Creating and linking sample processing logic")
 sample_buffer = BufferThread(queue.Queue(5))
