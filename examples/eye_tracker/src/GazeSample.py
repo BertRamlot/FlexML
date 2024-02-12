@@ -45,6 +45,8 @@ class GazeSample(MetadataSample):
     
 
 class GazeSampleCollection(MetadataSampleCollection):
+    
+    JPEG_QUALITY = 70
 
     def __init__(self, path: Path):
         super().__init__(path)
@@ -59,16 +61,21 @@ class GazeSampleCollection(MetadataSampleCollection):
 
     @pyqtSlot(MetadataSample)
     def add_sample(self, sample: MetadataSample):
+        """
+        Adds a MetadataSample to the collection by adding an entry to the csv and saving the gaze image.
+        
+        Args:
+            sample (MetadataSample): Sample to be added.
+        """
         images_dir_path = self.dataset_path / "raw"
         images_dir_path.mkdir(parents=True, exist_ok=True)
         if sample.img_path is None:
             sample.img_path = images_dir_path / f"{uuid.uuid4()}.jpg"
 
-        jpeg_quality: int = 50
         cv2.imwrite(
             str(sample.img_path),
             sample.get_img(),
-            [int(cv2.IMWRITE_JPEG_QUALITY), jpeg_quality]
+            [int(cv2.IMWRITE_JPEG_QUALITY), GazeSampleCollection.JPEG_QUALITY]
         )
 
         super().add_sample(sample)

@@ -38,6 +38,12 @@ class MetadataSampleCollection(SampleCollection):
     
     @pyqtSlot(MetadataSample)
     def add_sample(self, sample: MetadataSample):
+        """
+        Adds a MetadataSample to the collection by adding an entry to the csv.
+        
+        Args:
+            sample (MetadataSample): Sample to be added.
+        """
         df = pd.DataFrame([sample.get_metadata()], columns=self.get_metadata_headers())
         df.to_csv(self.metadata_csv_path, mode='a', header=not self.metadata_csv_path.is_file(), index=False)
         self.new_sample.emit(sample)
