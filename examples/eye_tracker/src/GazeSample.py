@@ -11,8 +11,8 @@ from FlexML.MetadataSample import MetadataSample, MetadataSampleCollection
 class GazeSample(MetadataSample):
     """Sample defined by an image (normally just a webcam frame), a screen position, and the corresponding screen dimensions."""
 
-    def __init__(self, type: str, screen_position: tuple[int|float, int|float], screen_dims: np.ndarray, img_path: Path | None, img: np.ndarray | None):
-        super().__init__(type, screen_position)
+    def __init__(self, type: str, screen_position: tuple[int|float, int|float], screen_dims: np.ndarray, img_path: Path | None, img: np.ndarray | None, creation_time: float = None):
+        super().__init__(type, screen_position, creation_time)
         self.img_path = img_path
         self._img = img
         self.screen_dims = screen_dims # [h, w]
@@ -30,7 +30,7 @@ class GazeSample(MetadataSample):
         else:
             y, x = self.ground_truth
         h, w = self.screen_dims
-        return [self.img_path.name, self.type, h, w, y, x]
+        return [self.img_path.name, self.type, self.creation_time, h, w, y, x]
     
 
 class GazeSampleCollection(MetadataSampleCollection):
@@ -39,12 +39,12 @@ class GazeSampleCollection(MetadataSampleCollection):
         super().__init__(path)
     
     def from_metadata(self, metadata) -> GazeSample:
-        img_name, type, win_y, win_x, pos_y, pos_x = metadata[:6]
+        img_name, type, creation_time, win_y, win_x, pos_y, pos_x = metadata[:7]
         img_path = self.dataset_path / "raw" / Path(img_name)
-        return GazeSample(type, (pos_y, pos_x), np.array([win_y, win_x]), img_path, None)
+        return GazeSample(type, (pos_y, pos_x), np.array([win_y, win_x]), img_path, None, creation_time)
     
     def get_metadata_headers(self) -> list[str]:
-        return ["type", "img_name", "win_y", "win_x", "y", "x"]
+        return ["type", "img_name", "creation_time", "win_y", "win_x", "y", "x"]
 
     @pyqtSlot(MetadataSample)
     def add_sample(self, sample: MetadataSample):
@@ -67,19 +67,17 @@ class GazeSampleMuxer(QObject):
 
     def __init__(self, type_supplier: collections.abc.Callable, screen_dims: np.ndarray):
         super().__init__()
-        self.last_img = None
-        self.last_label = None
+        self.last_ground_truth = None
         self.type_supplier = type_supplier
-        # You could also make this dynamic like 'img' and 'label' if needed
         self.screen_dims = screen_dims
 
     @pyqtSlot(np.ndarray)
-    def set_last_label(self, label: np.ndarray):
-        self.last_label = label
+    def set_last_ground_truth(self, last_ground_truth: np.ndarray):
+        self.last_ground_truth = last_ground_truth
     
     @pyqtSlot(np.ndarray)
     def set_last_img(self, img: np.ndarray):
-        self.last_img = img
-        
-        sample = GazeSample(self.type_supplier(), self.last_label, self.screen_dims, None, self.last_img)
+        type = None if self.last_ground_truth is None else self.type_supplier()
+        sample = GazeSample(type, self.last_ground_truth, self.screen_dims, None, img)
         self.new_sample.emit(sample)
+        self.last_ground_truth = None

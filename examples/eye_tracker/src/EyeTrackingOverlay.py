@@ -47,14 +47,13 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
             face_samples (list[FaceSample]): List of N face samples.
             predictions (np.ndarray): Prediction per face sample, shape is (N, 2) where each row is a (y, x) position.
         """
-        now_time = time.time()
         for face_sample, prediction in zip(face_samples, predictions):
             if face_sample.face_id in self.prediction_history:
-                min_time = now_time - EyeTrackingOverlay.PREDICTION_HISTORY_TIME_WINDOW
+                min_time = face_sample.creation_time - EyeTrackingOverlay.PREDICTION_HISTORY_TIME_WINDOW
                 new_history = [(time, pos) for time, pos in self.prediction_history[face_sample.face_id] if time >= min_time]
             else: 
                 new_history = []
-            new_history.append((now_time, prediction))
+            new_history.append((face_sample.creation_time, prediction))
             self.prediction_history[face_sample.face_id] = new_history
         self.update()
 

@@ -92,14 +92,14 @@ class VideoFileSourceObject(SourceObject):
         return self.reached_end
 
 class ScreenSourceObject(SourceObject):
-    def __init__(self, timeout: int, monitor: dict[str, int] | tuple[int, int, int, int] | None):
-        super().__init__(timeout, True)
+    def __init__(self, timeout: int, monitor: dict[str, int] | tuple[int, int, int, int] | None = None):
+        super().__init__(timeout, False)
         self.sct = mss.mss()
-        self.monitor = self.sct.monitors()[1] if monitor is None else monitor
+        self.monitor = self.sct.monitors[1] if monitor is None else monitor
 
     def __del__(self):
-        self.sct.release()
+        self.sct.close()
 
     def get(self) -> tuple[bool, np.ndarray]:
-        sct_img = self.sct.grab()
-        return sct_img    
+        sct_img = self.sct.grab(self.monitor)
+        return True, np.asarray(sct_img)

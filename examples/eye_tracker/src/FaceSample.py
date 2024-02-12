@@ -56,8 +56,8 @@ class FaceSampleCollection(GazeSampleCollection):
 
     def from_metadata(self, metadata) -> FaceSample:
         gaze_sample = super().from_metadata(metadata)
-        face_id = metadata[6]
-        features = np.asarray(metadata[7:], dtype=np.int32).reshape(-1, 2)
+        face_id = metadata[7]
+        features = np.asarray(metadata[8:], dtype=np.int32).reshape(-1, 2)
         return FaceSample(gaze_sample, face_id, features)
 
     def get_metadata_headers(self) -> list[str]:

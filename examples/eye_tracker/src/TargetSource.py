@@ -130,7 +130,7 @@ class FeedbackBallSourceObject(SourceObject):
         over_sample_force = np.zeros((2,))
         for sample, loss in self.error_map.items():
             dist = (sample.ground_truth - self.ball_pos) / self.screen_dims.max()
-            over_sample_force += np.copysign(1/(0.01 + abs(dist))**2, -dist)
+            over_sample_force += np.copysign(0.001/(0.01 + abs(dist))**2, -dist)
         # attracting force towards high loss
         loss_force = np.zeros((2,))
         for sample, loss in self.error_map.items():
@@ -194,4 +194,4 @@ class ClickListenerSourceObject(SourceObject):
         self.button_states = new_button_states
         
         x, y = win32api.GetCursorPos()
-        return (button != -1, y, x)
+        return (button != -1, np.array([y, x]))
