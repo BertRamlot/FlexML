@@ -5,16 +5,19 @@ from PyQt6 import QtGui, QtWidgets, QtCore
 
 from examples.eye_tracker.src.FaceSample import FaceSample
 
+
 class EyeTrackingOverlay(QtWidgets.QMainWindow):
 
+    # TODO: hard coded
     GROUND_TRUTH_HISTORY_LENGTH = 20
     INFERENCE_HISTORY_LENGTH = 50
+    INFERENCE_HISTORY_TIME = 1.0
 
     def __init__(self, window_dims: np.ndarray):
         super().__init__(flags=QtCore.Qt.WindowType.FramelessWindowHint | QtCore.Qt.WindowType.WindowStaysOnTopHint)
         self.window_dims = window_dims # [h, w]
-        self.gt_history = []
-        self.inference_history: dict[int, tuple[float, list[np.ndarray]]] = {}
+        self.ground_truth_history: list[np.ndarray] = []
+        self.inference_history: dict[int, tuple[list[float, np.ndarray]]] = {}
 
         self.setGeometry(0, 0, self.window_dims[1], self.window_dims[0])
         self.setStyleSheet("background:transparent")
@@ -23,7 +26,7 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
 
     @QtCore.pyqtSlot(np.ndarray)
     def register_gt_position(self, pos: np.ndarray):
-        self.gt_history = self.gt_history[1-EyeTrackingOverlay.GROUND_TRUTH_HISTORY_LENGTH:] + [pos]
+        self.ground_truth_history = self.ground_truth_history[1-EyeTrackingOverlay.GROUND_TRUTH_HISTORY_LENGTH:] + [pos]
         self.update()
 
     @QtCore.pyqtSlot(list, np.ndarray)
@@ -31,14 +34,12 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
         now_time = time.time()
         for face_sample, prediction in zip(face_samples, predictions):
             if face_sample.face_id in self.inference_history:
-                last_inference_time, old_history = self.inference_history[face_sample.face_id]
-                if last_inference_time + 1.0 > now_time:
-                    new_history = old_history[1-EyeTrackingOverlay.INFERENCE_HISTORY_LENGTH:] + [prediction]
-                else:
-                    new_history = [prediction]
+                min_time = now_time - EyeTrackingOverlay.INFERENCE_HISTORY_TIME
+                new_history = [(time, pos) for time, pos in self.inference_history[face_sample.face_id] if time >= min_time]
             else: 
-                new_history = [prediction]
-            self.inference_history[face_sample.face_id] = (time.time(), new_history)
+                new_history = []
+            new_history.append((now_time, prediction))
+            self.inference_history[face_sample.face_id] = new_history
         self.update()
 
     def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
@@ -55,21 +56,28 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
         qp.end()
 
     def draw_target_location(self, qp: QtGui.QPainter):
-        if not self.gt_history:
+        if not self.ground_truth_history:
             return
-        position = self.gt_history[-1]
-        outer_ring_color = QtCore.Qt.GlobalColor.yellow
-        inner_ring_color = QtCore.Qt.GlobalColor.red
-
+        
+        # Draws the path of the ground_truth
+        # polygon = QtGui.QPolygon()
+        # for point in self.ground_truth_history:
+        #     polygon.append(QtCore.QPoint(*np.flip(point)))
+        # pen = QtGui.QPen(QtCore.Qt.GlobalColor.green, 1, QtCore.Qt.PenStyle.SolidLine)
+        # qp.setPen(pen)
+        # qp.drawPolyline(polygon)
+        
+        # Draw the target (ball):
+        position = self.ground_truth_history[-1]
         y, x = position.round().astype(np.int32)
-
+        # - Draw outer ring
         r = 10
-        pen = QtGui.QPen(outer_ring_color, 8, QtCore.Qt.PenStyle.SolidLine)
+        pen = QtGui.QPen(QtCore.Qt.GlobalColor.yellow, 8, QtCore.Qt.PenStyle.SolidLine)
         qp.setPen(pen)
         qp.drawEllipse(x-r, y-r, 2*r, 2*r)
-
+        # - Draw inner ring
         r = 5
-        pen = QtGui.QPen(inner_ring_color, 2, QtCore.Qt.PenStyle.SolidLine)
+        pen = QtGui.QPen(QtCore.Qt.GlobalColor.red, 2, QtCore.Qt.PenStyle.SolidLine)
         qp.setPen(pen)
         qp.drawEllipse(x-r, y-r, 2*r, 2*r)
 
@@ -79,14 +87,17 @@ class EyeTrackingOverlay(QtWidgets.QMainWindow):
 
         now_time = time.time()
         for face_id in self.inference_history:
-            last_update_time, prediction_history = self.inference_history[face_id]
-            if last_update_time + 1.0 < now_time:
+            if len(self.inference_history[face_id]) == 0:
                 continue
+            times, positions = zip(*self.inference_history[face_id])
+            
             # Exponential average over the current prediction_history
-            # This reduces the temporal instabilities
-            alpha = 0.5
-            predicted_pos = np.array([alpha*((1-alpha)**i)*p for i, p in enumerate(reversed(prediction_history))]).sum(axis=0)
-            predicted_pos /= 1-(1-alpha)**len(prediction_history)
+            # This reduces the temporal instabilities: higher alpha => higher weight towards fresher samples
+            alpha = 8.0
+            factors = np.exp((np.array(times) - now_time) * alpha)
+            factors /= factors.sum()
+            # print(factors)
+            predicted_pos = (factors[:, np.newaxis] * positions).sum(axis=0) 
             # Put out of bound coordinates to the edge of the screen. This is not done in the training loop
             predicted_pos = (np.clip(predicted_pos, 0.0, 1.0) * self.window_dims.max()).round().astype(np.int32)
 
