@@ -7,7 +7,10 @@ from PyQt6.QtCore import QObject, pyqtSignal, pyqtSlot
 from examples.eye_tracker.src.FaceSample import FaceSample
 
 
-class FaceSampleTensorfier(QObject):    
+class FaceSampleTensorfier(QObject):
+    """
+    Adds tensors to FaceSamples.
+    """
     train_tuples = pyqtSignal(FaceSample, torch.Tensor, torch.Tensor)
     inference_tuples = pyqtSignal(FaceSample, torch.Tensor)
 
@@ -47,11 +50,23 @@ class FaceSampleTensorfier(QObject):
 
     @pyqtSlot(FaceSample)
     def add_X_tensor(self, sample: FaceSample):
+        """
+        Emits an inference tuple consisting of a FaceSample and its input tensor X.
+
+        Args:
+            sample (FaceSample): FaceSample instance used to generate the input tensor X.
+        """
         X = self.face_sample_to_X_tensor(sample)
         self.inference_tuples.emit(sample, X)
 
     @pyqtSlot(FaceSample)
     def add_X_y_tensors(self, sample: FaceSample):
+        """
+        Emits a training tuple consisting of FaceSample, input tensor X, and output tensor y.
+
+        Args:
+            sample (FaceSample): FaceSample instance used to generate the input tensor X and output tensor y.
+        """
         if sample.ground_truth is None:
             return
         X = self.face_sample_to_X_tensor(sample)
@@ -82,15 +97,15 @@ class FaceNetwork(nn.Module):
             nn.Linear(out_eye_size*2+self.metadata_size, 2)
         )
 
-    def forward(self, x):
+    def forward(self, X: torch.Tensor):
         eye_size = FaceSample.EYE_DIMENSIONS.prod()
 
-        left_eye_input = x[:,:eye_size].reshape(-1, 1, *FaceSample.EYE_DIMENSIONS)
-        right_eye_input = x[:,eye_size:2*eye_size].reshape(-1, 1, *FaceSample.EYE_DIMENSIONS)
+        left_eye_input = X[:,:eye_size].reshape(-1, 1, *FaceSample.EYE_DIMENSIONS)
+        right_eye_input = X[:,eye_size:2*eye_size].reshape(-1, 1, *FaceSample.EYE_DIMENSIONS)
 
         main_input = [self.left_eye_stack(left_eye_input), self.right_eye_stack(right_eye_input)]
         if self.metadata_size > 0:
-            main_input.append(x[:, 2*eye_size:2*eye_size+self.metadata_size])
+            main_input.append(X[:, 2*eye_size:2*eye_size+self.metadata_size])
         main_input = torch.cat(main_input, 1)
         output = self.main_stack(main_input)
         return output
