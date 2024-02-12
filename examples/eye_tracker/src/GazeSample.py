@@ -25,10 +25,10 @@ class GazeSample(MetadataSample):
         return self._img
     
     def get_metadata(self) -> list:
-        if self.gt is None:
+        if self.ground_truth is None:
             y, x = (None, None)
         else:
-            y, x = self.gt
+            y, x = self.ground_truth
         h, w = self.screen_dims
         return [self.img_path.name, self.type, h, w, y, x]
     

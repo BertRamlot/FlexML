@@ -9,7 +9,7 @@ from examples.eye_tracker.src.FaceSample import FaceSample
 
 def face_sample_to_y_tensor(sample: FaceSample, device):
     screen_max_dim = sample.screen_dims.max()
-    return torch.tensor(sample.gt).to(device=device) / screen_max_dim
+    return torch.tensor(sample.ground_truth).to(device=device) / screen_max_dim
 
 def face_sample_to_X_tensor(sample: FaceSample, device):
     def pre_process_img(img):
@@ -56,7 +56,7 @@ class FaceSampleToTrainPair(QObject):
 
     @pyqtSlot(FaceSample)
     def to_train_pair(self, sample: FaceSample):
-        if sample.gt is None:
+        if sample.ground_truth is None:
             return
         X = face_sample_to_X_tensor(sample, self.device)
         y = face_sample_to_y_tensor(sample, self.device)

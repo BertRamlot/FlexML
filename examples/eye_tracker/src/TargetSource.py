@@ -1,3 +1,4 @@
+import logging
 import numpy as np
 import time
 import random
@@ -9,30 +10,43 @@ from FlexML.SourceObject import SourceObject
 
 
 class SimpleBallSourceObject(SourceObject):
-    """Ball that moves straight at a constant speed. When touching the edge of the screen, it bounces in a random direction that biased towards the sides."""
+    """
+    A ball that moves straight at a constant speed and bounces when touching the edge of the screen.
+    The bounce is biased towards the towards the sides/corners of the screen.
+    """
+    
+    MIN_TIME_BETWEEN_UPDATES = 0.01
 
     def __init__(self, screen_dims: np.ndarray, timeout: int):
+        """
+        Initializes the SimpleBallSourceObject with screen dimensions and timeout.
+
+        Args:
+            screen_dims (np.ndarray): The dimensions of the screen, shape is (2,) with format (height, width).
+            timeout (int): The time in seconds between updates.
+        """
+        if timeout < SimpleBallSourceObject.MIN_TIME_BETWEEN_UPDATES:
+            logging.warning("Timeout ({}) is smaller than the set minimum ({}), this will cause unneeded overhead"
+                            .format(timeout, SimpleBallSourceObject.MIN_TIME_BETWEEN_UPDATES))
+        
         super().__init__(timeout, False)
         self.screen_dims = screen_dims
-
         self.ball_time = None
-        self.ball_pos = self.screen_dims/2.0
-        self.ball_vel = np.array([self.screen_dims[0]/5.0, self.screen_dims[1]/10.0])
+        self.ball_pos = self.screen_dims / 2.0
+        self.ball_vel = self.screen_dims / np.array([5.0, 10.0])
 
     def get(self) -> tuple[bool, np.ndarray]:
         now_time = time.time()
-
         if self.ball_time is None:
             self.ball_time = now_time
         dt = now_time - self.ball_time
-        if dt > 0.01:
+        if dt >= SimpleBallSourceObject.MIN_TIME_BETWEEN_UPDATES:
             # Update ball properties
             self.ball_time = now_time
             self.ball_pos += self.ball_vel*dt
             out_of_bounds_state = 1*(self.ball_pos > self.screen_dims) - 1*(self.ball_pos < 0)
-            # self.ball_vel *= np.where(out_of_bounds_state == 0, 1, -1)
             if (out_of_bounds_state != 0).any():
-                # Bounce logic
+                # Bounce logic, this is more complex due to the desired bias towards the sides
                 if (out_of_bounds_state != 0).all():
                     # Corner hit, choice random side
                     out_of_bounds_state[random.getrandbits(1)] = 0
@@ -50,7 +64,7 @@ class SimpleBallSourceObject(SourceObject):
                     base_angle = np.pi / 2.0
                     clock_wise = (self.ball_vel[0] > 0) and (self.ball_vel[1] < 0)
 
-                # Random angle is biases towards staying to the sides
+                # Random angle is biased towards staying to the sides
                 rnd_angle = (random.random()**2)*np.pi/2
                 if clock_wise:
                     target_angle = base_angle - rnd_angle
@@ -65,12 +79,19 @@ class SimpleBallSourceObject(SourceObject):
         return (True, self.ball_pos.astype(np.int32))
     
 class FeedbackBallSourceObject(SourceObject):
-    """Ball that is drawn pulled towards areas with few samples and/or high errors."""
+    """
+    A ball that avoid areas with many samples and moves towards areas with high loss.
+    """
+
+    MIN_TIME_BETWEEN_UPDATES = 0.01
 
     def __init__(self, screen_dims: np.ndarray, timeout: int):
+        if timeout < FeedbackBallSourceObject.MIN_TIME_BETWEEN_UPDATES:
+            logging.warning("Timeout ({}) is smaller than the set minimum ({}), this will cause unneeded overhead"
+                            .format(timeout, FeedbackBallSourceObject.MIN_TIME_BETWEEN_UPDATES))
+        
         super().__init__(timeout, False)
         self.screen_dims = screen_dims
-
         self.ball_time = None
         self.ball_pos = self.screen_dims/2.0
         self.ball_vel = self.screen_dims/7.0
@@ -81,6 +102,13 @@ class FeedbackBallSourceObject(SourceObject):
 
     @pyqtSlot(list, np.ndarray)
     def update_sample_errors(self, samples: list[Sample], losses: np.ndarray):
+        """
+        Updates the criterion loss for a list of samples.
+
+        Args:
+            samples (list[Sample]): List of N samples.
+            losses (np.ndarray): Loss per sample, shape is (N,).
+        """
         self.mutex.lock()
         for sample, loss in zip(samples, losses):
             if sample.type in ["train", "val"]:
@@ -92,22 +120,22 @@ class FeedbackBallSourceObject(SourceObject):
                 self.error_map[sample] = loss
         self.mutex.unlock()
 
-    def get_force_vector(self, position: np.ndarray):
+    def _get_force_vector_on_ball(self):
         # We do not like the center
-        center_force = position / self.screen_dims - 0.5*np.ones((2,))
-        center_force = 1000* center_force / (1e-2 + np.linalg.norm(center_force))
+        center_force = (self.ball_pos - self.screen_dims/2.0) / self.screen_dims.max()
+        center_force = center_force / (0.01 + np.linalg.norm(center_force))
 
         self.mutex.lock()
         # repelling force to prevent oversampling
         over_sample_force = np.zeros((2,))
         for sample, loss in self.error_map.items():
-            dist = sample.gt - position
-            over_sample_force += np.copysign(self.screen_dims.max()**1.5/(10.0 + abs(dist))**2, -dist)
+            dist = (sample.ground_truth - self.ball_pos) / self.screen_dims.max()
+            over_sample_force += np.copysign(1/(0.01 + abs(dist))**2, -dist)
         # attracting force towards high loss
         loss_force = np.zeros((2,))
         for sample, loss in self.error_map.items():
             if loss is not None:
-                dist = sample.gt - position
+                dist = (sample.ground_truth - self.ball_pos) / self.screen_dims.max()
                 loss_force += np.copysign(loss**2/(10.0 + abs(dist)), dist)
         
         total_force = np.zeros((2,))
@@ -117,6 +145,7 @@ class FeedbackBallSourceObject(SourceObject):
         if len(self.error_map) > 0:
             total_force /= len(self.error_map)
         self.mutex.unlock()
+        total_force *= self.screen_dims.max()
         total_force += np.random.random((2,))*self.max_speed/10.0
         return total_force
 
@@ -125,10 +154,10 @@ class FeedbackBallSourceObject(SourceObject):
         if self.ball_time is None:
             self.ball_time = now_time
         dt = now_time - self.ball_time
-        if dt > 0.01:
+        if dt >= FeedbackBallSourceObject.MIN_TIME_BETWEEN_UPDATES:
             # Update ball properties
             self.ball_time = now_time
-            new_ball_vel = self.ball_vel + self.get_force_vector(self.ball_pos)*dt
+            new_ball_vel = self.ball_vel + self._get_force_vector_on_ball()*dt
             if np.linalg.norm(new_ball_vel) > self.max_speed:
                 new_ball_vel = self.max_speed * (new_ball_vel / np.linalg.norm(new_ball_vel))
             elif np.linalg.norm(new_ball_vel) < self.min_speed:
@@ -140,12 +169,13 @@ class FeedbackBallSourceObject(SourceObject):
             out_of_bounds_mask = (self.ball_pos < 0) | (self.ball_pos > self.screen_dims)
             self.ball_pos = np.clip(self.ball_pos, 0, self.screen_dims)
             self.ball_vel *= np.where(out_of_bounds_mask, -1, 1)
-            # self.ball_vel = np.array([0, 0])
 
         return (True, self.ball_pos.astype(np.int32))
 
 class ClickListenerSourceObject(SourceObject):
-    """Records where the mouse clicks."""
+    """
+    Records where the mouse clicks.
+    """
 
     def __init__(self, timeout: int, buttons = [1, 2]):
         super().__init__(timeout, False)

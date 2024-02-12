@@ -13,14 +13,14 @@ import torch
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QCoreApplication, QEventLoop, QObject, pyqtSignal, pyqtSlot
 
-from FlexML.SourceObject import WebcamSourceObject, SourceObject
+from FlexML.SourceObject import WebcamSourceObject, ScreenSourceObject
 from FlexML.Sample import Sample
 from FlexML.Model import ModelElement, ModelController
 from FlexML.Helper import BufferThread, Filter
 from FlexML.Linker import link_QObjects
 
 from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
-from examples.eye_tracker.src.TargetSource import SimpleBallSourceObject, FeedbackBallSourceObject
+from examples.eye_tracker.src.TargetSource import SimpleBallSourceObject, FeedbackBallSourceObject, ClickListenerSourceObject
 from examples.eye_tracker.src.FaceSample import GazeToFaceSamplesConvertor
 from examples.eye_tracker.src.FaceNetwork import FaceSampleToTrainPair, FaceSampleToInferencePair
 from examples.eye_tracker.src.GazeSample import GazeSampleMuxer
@@ -37,6 +37,15 @@ LOSS_FUNCTIONS = {
     "l1_y": lambda y1, y2: (y1[..., 1] - y2[..., 1]).abs(),
     "euclid": lambda y1, y2: (y1-y2).pow(2).sum(-1).sqrt(),
     "criterion": lambda y1, y2: (y1-y2).pow(2).sum(-1).sqrt()
+}
+GROUND_TRUTH_SOURCE_SUPPLIERS = {
+    "simple-ball": lambda : SimpleBallSourceObject(screen_dims, 0.02),
+    "feedback-ball": lambda : FeedbackBallSourceObject(screen_dims, 0.02),
+    "click-listener": lambda : ClickListenerSourceObject(0.03),
+}
+IMG_SOURCE_SUPPLIERS = {
+    "webcam": lambda : WebcamSourceObject(0.03),
+   "screen": lambda : ScreenSourceObject(0.03)
 }
 DATASET_CONFIGS = [
     {
@@ -62,8 +71,8 @@ parser.add_argument("--load_datasets", type=str, nargs="*", default=None)
 parser.add_argument("--save_dataset", type=str, default=None)
 parser.add_argument("--train", action='store_true')
 parser.add_argument("--inference", action='store_true')
-parser.add_argument("--gt_source", type=str, default=None, choices=["simple-ball", "feedback-ball"])
-parser.add_argument("--img_source", type=str, default=None, choices=["webcam"])
+parser.add_argument("--gt_source", type=str, default=None, choices=GROUND_TRUTH_SOURCE_SUPPLIERS.keys())
+parser.add_argument("--img_source", type=str, default=None, choices=IMG_SOURCE_SUPPLIERS.keys())
 parser.add_argument("--model", type=str, default=None)
 parser.add_argument('--device', type=str, default="cuda")
 args = parser.parse_args(sys.argv[1:])
@@ -112,21 +121,11 @@ else:
     model_element = None
 
 logging.debug("Creating and linking live data sources")
-def get_source_worker(uid: str|None) -> SourceObject:
-    if uid is None:
-        return None
-    elif uid == "simple-ball":
-        return SimpleBallSourceObject(screen_dims, 0.02)
-    elif uid == "feedback-ball":
-        return FeedbackBallSourceObject(screen_dims, 0.02)
-    elif uid == "webcam":
-        return WebcamSourceObject(0.03)
-    else:
-        raise LookupError("Invalid source worker uid:", uid)
-gt_src_thread = get_source_worker(args.gt_source) 
-img_src_thread = get_source_worker(args.img_source)
+
+gt_src_thread = None if args.gt_source is None else GROUND_TRUTH_SOURCE_SUPPLIERS[args.gt_source]()
+img_src_thread = None if args.img_source is None else IMG_SOURCE_SUPPLIERS[args.img_source]()
 sample_muxer = GazeSampleMuxer(TYPE_SUPPLIER, screen_dims)
-link_QObjects(gt_src_thread, ("register_gt_position", overlay))
+link_QObjects(gt_src_thread, ("register_ground_truth", overlay))
 link_QObjects(gt_src_thread,  ("set_last_label", sample_muxer))
 link_QObjects(img_src_thread, ("set_last_img",   sample_muxer))
 
@@ -170,7 +169,7 @@ if args.train:
 if args.inference:
     face_sample_to_inference_pair = FaceSampleToInferencePair(args.device)
     link_QObjects(gaze_to_face_sample, face_sample_to_inference_pair, model_controller)
-    link_QObjects((model_element, "inference_results"), ("register_inference_positions", overlay))
+    link_QObjects((model_element, "inference_results"), ("register_predictions", overlay))
 
 # Save data to disk
 if args.save_dataset:
