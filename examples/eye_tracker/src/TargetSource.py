@@ -17,13 +17,13 @@ class SimpleBallSourceObject(SourceObject):
     
     MIN_TIME_BETWEEN_UPDATES = 0.01
 
-    def __init__(self, screen_dims: np.ndarray, timeout: int):
+    def __init__(self, screen_dims: np.ndarray, timeout: float):
         """
         Initializes the SimpleBallSourceObject with screen dimensions and timeout.
 
         Args:
             screen_dims (np.ndarray): The dimensions of the screen, shape is (2,) with format (height, width).
-            timeout (int): The time in seconds between updates.
+            timeout (float): The time in seconds between updates.
         """
         if timeout < SimpleBallSourceObject.MIN_TIME_BETWEEN_UPDATES:
             logging.warning("Timeout ({}) is smaller than the set minimum ({}), this will cause unneeded overhead"
@@ -80,7 +80,7 @@ class SimpleBallSourceObject(SourceObject):
     
 class FeedbackBallSourceObject(SourceObject):
     """
-    A ball that avoid areas with many samples and moves towards areas with high loss.
+    A ball that avoid oversampled areas and moves towards areas with high loss.
     """
 
     MIN_TIME_BETWEEN_UPDATES = 0.01
@@ -93,11 +93,10 @@ class FeedbackBallSourceObject(SourceObject):
         super().__init__(timeout, False)
         self.screen_dims = screen_dims
         self.ball_time = None
-        self.ball_pos = self.screen_dims/2.0
-        self.ball_vel = self.screen_dims/7.0
-        self.min_speed = self.screen_dims.max()/12.0
-        self.max_speed = self.screen_dims.max()/5.0
-        self.mutex = QMutex()
+        self.ball_pos = self.screen_dims / 2.0
+        self.ball_vel = self.screen_dims / np.array([5.0, 10.0])
+        self.min_speed = self.screen_dims.max() / 12.0
+        self.max_speed = self.screen_dims.max() / 5.0
         self.error_map: dict[Sample, float] = {}
 
     @pyqtSlot(list, np.ndarray)
@@ -109,8 +108,8 @@ class FeedbackBallSourceObject(SourceObject):
             samples (list[Sample]): List of N samples.
             losses (np.ndarray): Loss per sample, shape is (N,).
         """
-        self.mutex.lock()
         for sample, loss in zip(samples, losses):
+            # Ignore "test" type
             if sample.type in ["train", "val"]:
                 if sample.type == "train":
                     # Don't use training loss, only validation loss
@@ -118,35 +117,37 @@ class FeedbackBallSourceObject(SourceObject):
                 if loss is None and sample in self.error_map:
                     continue
                 self.error_map[sample] = loss
-        self.mutex.unlock()
 
     def _get_force_vector_on_ball(self):
-        # We do not like the center
-        center_force = (self.ball_pos - self.screen_dims/2.0) / self.screen_dims.max()
-        center_force = center_force / (0.01 + np.linalg.norm(center_force))
+        # We do not like the center (in the beginning)
+        center_dist = (self.ball_pos - self.screen_dims/2.0) / self.screen_dims.max()
+        center_dist_norm = max(1e-5, np.linalg.norm(center_dist))
+        center_dist = (center_dist/center_dist_norm) / (0.01 + center_dist_norm)
 
-        self.mutex.lock()
-        # repelling force to prevent oversampling
+        # Repelling force to prevent oversampling
         over_sample_force = np.zeros((2,))
-        for sample, loss in self.error_map.items():
-            dist = (sample.ground_truth - self.ball_pos) / self.screen_dims.max()
-            over_sample_force += np.copysign(0.001/(0.01 + abs(dist))**2, -dist)
-        # attracting force towards high loss
+        # Attracting force towards high loss
         loss_force = np.zeros((2,))
+        max_loss = max((v for v in self.error_map.values() if v is not None), default=1.0)
         for sample, loss in self.error_map.items():
+            to_sample_vec = (sample.ground_truth - self.ball_pos) / self.screen_dims.max()
+            to_sample_vec_norm = max(1e-5, np.linalg.norm(to_sample_vec))
+            over_sample_force += - (to_sample_vec/to_sample_vec_norm) * 1/(0.1 + to_sample_vec_norm)
             if loss is not None:
-                dist = (sample.ground_truth - self.ball_pos) / self.screen_dims.max()
-                loss_force += np.copysign(loss**2/(10.0 + abs(dist)), dist)
-        
-        total_force = np.zeros((2,))
-        total_force += center_force
-        total_force += over_sample_force
-        total_force += loss_force
-        if len(self.error_map) > 0:
-            total_force /= len(self.error_map)
-        self.mutex.unlock()
-        total_force *= self.screen_dims.max()
-        total_force += np.random.random((2,))*self.max_speed/10.0
+                loss_force += (to_sample_vec/to_sample_vec_norm) * (loss/max_loss)**2/(0.1 + to_sample_vec_norm)
+
+        over_sample_force /= max(1, len(self.error_map))
+        loss_force /= max(1, sum(1 for loss in self.error_map.values() if loss is not None))
+               
+        total_force = np.sum(
+            [
+                # 0.1*center_force,
+                # over_sample_force,
+                2.0*loss_force,
+                # np.random.uniform(-1, 1, size=(2,))
+            ],
+            axis=0
+        ) * 0.1 * self.screen_dims.max()
         return total_force
 
     def get(self) -> tuple[bool, tuple[float, float]]:

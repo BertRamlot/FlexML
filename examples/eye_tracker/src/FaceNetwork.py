@@ -19,23 +19,20 @@ class FaceSampleTensorfier(QObject):
         self.device = device
 
     def face_sample_to_X_tensor(self, sample: FaceSample) -> torch.Tensor:
+        # cv2.imshow("FULL", sample.get_img())
+        # cv2.imshow("FACE", sample.get_face_img())
+        # cv2.imshow("EYE_L", pre_process_img(sample.get_eye_im("left")))
+        # cv2.imshow("EYE_R", pre_process_img(sample.get_eye_im("right")))
+        # cv2.waitKey(0)
+        
+        tensor_vals = []
+        
+        # Eye data
         def pre_process_img(img):
             gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
             return np.asarray(gray_img)/255.0
         left_eye_tensor = torch.from_numpy(pre_process_img(sample.get_eye_img("left"))).float()
         right_eye_tensor = torch.from_numpy(pre_process_img(sample.get_eye_img("right"))).float()
-
-        """
-        cv2.imshow("FULL", sample.get_img())
-        cv2.imshow("FACE", sample.get_face_img())
-        cv2.imshow("EYE_L", pre_process_img(sample.get_eye_im("left")))
-        cv2.imshow("EYE_R", pre_process_img(sample.get_eye_im("right")))
-        # cv2.waitKey(0) 
-        """
-
-        tensor_vals = []
-        
-        # Eye data
         tensor_vals.append(left_eye_tensor.flatten())
         tensor_vals.append(right_eye_tensor.flatten())
         
@@ -94,18 +91,19 @@ class FaceNetwork(nn.Module):
         self.right_eye_stack = self.left_eye_stack # gen_eye_stack()
 
         self.main_stack = nn.Sequential(
-            nn.Linear(out_eye_size*2+self.metadata_size, 2)
+            nn.Linear(out_eye_size*2+self.metadata_size, 5),
+            nn.ReLU(),
+            nn.Linear(5, 2),
         )
 
     def forward(self, X: torch.Tensor):
         eye_size = FaceSample.EYE_DIMENSIONS.prod()
-
-        left_eye_input = X[:,:eye_size].reshape(-1, 1, *FaceSample.EYE_DIMENSIONS)
-        right_eye_input = X[:,eye_size:2*eye_size].reshape(-1, 1, *FaceSample.EYE_DIMENSIONS)
-
-        main_input = [self.left_eye_stack(left_eye_input), self.right_eye_stack(right_eye_input)]
-        if self.metadata_size > 0:
-            main_input.append(X[:, 2*eye_size:2*eye_size+self.metadata_size])
-        main_input = torch.cat(main_input, 1)
-        output = self.main_stack(main_input)
-        return output
+        main_input = torch.cat(
+            [
+                self.left_eye_stack(X[:,:eye_size].reshape(-1, 1, *FaceSample.EYE_DIMENSIONS)),
+                self.right_eye_stack(X[:,eye_size:2*eye_size].reshape(-1, 1, *FaceSample.EYE_DIMENSIONS)),
+                X[:, 2*eye_size:2*eye_size+self.metadata_size]
+            ],
+            1
+        )
+        return self.main_stack(main_input)

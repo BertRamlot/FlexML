@@ -40,10 +40,10 @@ class SourceObject(QObject):
         """
         while not self.is_done():
             t0 = time.time()
+            self._thread.eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
             success, item = self.get()
             if success:
                 self.new_object.emit(item)
-            self._thread.eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
             t1 = time.time()
             sleep_ms = int(1000 * (self.timeout - (t1 - t0)))
             if sleep_ms > 0:
