@@ -29,7 +29,9 @@ class BufferThread(QThread):
             self.eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
 
 class AttributeSelector(QObject):
-    """Emits an attribute of the incomming object."""
+    """
+    Emits an attribute of the incomming object.
+    """
 
     output_attribute = pyqtSignal(object)
 
@@ -45,20 +47,24 @@ class AttributeSelector(QObject):
         self.output_attribute.emit(attr)
 
 class Convertor(QObject):
-    """Converts the incomming objects using the specified function and emits the result."""
+    """
+    Converts the incomming object using the specified function and emits the result.
+    """
 
     output = pyqtSignal(object)
 
-    def __init__(self, function: collections.abc.Callable) -> None:
+    def __init__(self, convert_function: collections.abc.Callable) -> None:
         super().__init__()
-        self.function = function
+        self.convert_function = convert_function
     
     @pyqtSlot(object)
     def on_input(self, object: object):
-        self.output.emit(self.function(object))
+        self.output.emit(self.convert_function(self, object))
 
 class Filter(QObject):
-    """Emits an incoming object only if the predicate evaluates to True."""
+    """
+    Emits the incoming object only if the predicate evaluates to True.
+    """
 
     output = pyqtSignal(object)
     

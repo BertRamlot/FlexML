@@ -12,7 +12,7 @@ from FlexML.SourceObject import SourceObject
 class SimpleBallSourceObject(SourceObject):
     """
     A ball that moves straight at a constant speed and bounces when touching the edge of the screen.
-    The bounce is biased towards the towards the sides/corners of the screen.
+    The bounce is biased towards the sides/corners of the screen.
     """
     
     MIN_TIME_BETWEEN_UPDATES = 0.01
@@ -80,7 +80,7 @@ class SimpleBallSourceObject(SourceObject):
     
 class FeedbackBallSourceObject(SourceObject):
     """
-    A ball that avoid oversampled areas and moves towards areas with high loss.
+    A ball that avoids oversampled areas and moves towards areas with high loss.
     """
 
     MIN_TIME_BETWEEN_UPDATES = 0.01
@@ -119,10 +119,10 @@ class FeedbackBallSourceObject(SourceObject):
                 self.error_map[sample] = loss
 
     def _get_force_vector_on_ball(self):
-        # We do not like the center (in the beginning)
+        # We do not like the center
         center_dist = (self.ball_pos - self.screen_dims/2.0) / self.screen_dims.max()
         center_dist_norm = max(1e-5, np.linalg.norm(center_dist))
-        center_dist = (center_dist/center_dist_norm) / (0.01 + center_dist_norm)
+        center_force = (center_dist/center_dist_norm) / (0.01 + center_dist_norm)
 
         # Repelling force to prevent oversampling
         over_sample_force = np.zeros((2,))
@@ -141,10 +141,10 @@ class FeedbackBallSourceObject(SourceObject):
                
         total_force = np.sum(
             [
-                # 0.1*center_force,
-                # over_sample_force,
+                0.02*center_force,
+                over_sample_force,
                 2.0*loss_force,
-                # np.random.uniform(-1, 1, size=(2,))
+                np.random.uniform(-1, 1, size=(2,))
             ],
             axis=0
         ) * 0.1 * self.screen_dims.max()

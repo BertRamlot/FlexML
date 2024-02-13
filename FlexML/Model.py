@@ -161,6 +161,7 @@ class ModelController(QThread):
         self.condition = QWaitCondition()
 
     def run(self):
+        logging.info(f"Waiting for {self.pause_training_till_n_train_samples} initial samples before starting training...")
         val_loss_per_epoch = []
         while True:
             # Wait for something to do
