@@ -21,11 +21,9 @@ from FlexML.Linker import link_QObjects
 
 from examples.eye_tracker.src.EyeTrackingOverlay import EyeTrackingOverlay
 from examples.eye_tracker.src.TargetSource import SimpleBallSourceObject, FeedbackBallSourceObject, ClickListenerSourceObject
-from examples.eye_tracker.src.FaceSample import GazeToFaceSamplesConvertor
-from examples.eye_tracker.src.FaceNetwork import FaceSampleTensorfier
+from examples.eye_tracker.src.FaceSample import FaceSampleCollection, GazeToFaceSamplesConvertor
+from examples.eye_tracker.src.FaceNetwork import FaceSampleTensorfier, FaceNetwork
 from examples.eye_tracker.src.GazeSample import GazeSampleMuxer
-from examples.eye_tracker.src.FaceSample import FaceSampleCollection
-from examples.eye_tracker.src.FaceNetwork import FaceNetwork
 
 # Config
 INITIAL_TRAIN_SAMPLES_REQ_BEFORE_TRAINING = 50
@@ -161,7 +159,7 @@ if isinstance(gt_src_thread, FeedbackBallSourceObject):
         def on_input(self, sample: Sample, _, __):
             self.output.emit([sample], np.array([None]))
     train_pair_to_sample_loss = TrainPairToSampleLoss()
-    link_QObjects(face_sample_tensorfier, train_pair_to_sample_loss, gt_src_thread)    
+    link_QObjects((face_sample_tensorfier, "train_tuples"), train_pair_to_sample_loss, gt_src_thread)    
 
 if args.train:
     link_QObjects(new_train_samples, ("add_X_y_tensors", face_sample_tensorfier, "train_tuples"), model_controller)
