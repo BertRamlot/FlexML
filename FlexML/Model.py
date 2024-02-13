@@ -1,7 +1,7 @@
 import logging
 import collections
 import numpy as np
-import Path from pathlib
+from pathlib import Path
 import torch
 from torch.utils.data import DataLoader, Dataset
 try:
@@ -25,8 +25,8 @@ class DynamicDataset(Dataset):
         self.type = type
         # Min size needs to be atleast one for pytorch DataLoader to not throw an error when using "shuffle=True"
         # So some placeholder items are added that are later removed
-        # Another way to resolve this is to write your own custom sampler:
-        # https://stackoverflow.com/questions/70369070/can-a-pytorch-dataloader-start-with-an-empty-dataset
+        # Another way to resolve this is to write your own custom sampler
+        # Also see: https://stackoverflow.com/questions/70369070/can-a-pytorch-dataloader-start-with-an-empty-dataset
         self.input_label_pairs: list[tuple[np.ndarray, np.ndarray]] = [(torch.empty((0,)), torch.empty((0,)))]
         self.samples: list[Sample] = [None]
 
@@ -66,11 +66,11 @@ class ModelElement(QObject):
         Args:
             model (torch.nn.Module): PyTorch model.
             optimizer (torch.optim.Optimizer): Optimizer for training.
-            checkpoint: Checkpoint for resuming training (set to None if want to start from scratch).
+            checkpoint: Checkpoint for resuming training (set to None when starting from scratch).
             model_path (Path): Base folder of the model to save checkpoints and write logs.
             device (str): Device to run the model on (e.g., 'cpu', 'cuda').
             dataset_configs (list[dict[str, object]]): List of dataset configurations.
-            loss_functions (dict[str, collections.abc.Callable]): Dictionary of loss functions, loss function used for training is called "criterion".
+            loss_functions (dict[str, collections.abc.Callable]): Dictionary of loss functions, loss function used for training NEEDS to be called "criterion".
         """
         self.epoch = 0
         self.model = model
@@ -206,8 +206,8 @@ class ModelController(QThread):
         if "val" not in self.model_element.datasets:
             logging.warning("No 'val' dataset found, model controller will keep training once started.")
 
-        self.inference_queue: list[tuple[Sample, torch.Tensor]] = []
-        self.new_samples: list[tuple[Sample, torch.Tensor, torch.Tensor]] = []
+        self.new_inference_tuples: list[tuple[Sample, torch.Tensor]] = []
+        self.new_training_tuples: list[tuple[Sample, torch.Tensor, torch.Tensor]] = []
 
         self.pause_training_till_n_train_samples = initial_train_samples_req_before_training
         self.save_checkpoint_every_n_epochs = save_checkpoint_every_n_epochs
@@ -221,10 +221,10 @@ class ModelController(QThread):
         while True:
             # Wait for something to do
             self.mutex.lock()
-            while not self.inference_queue and not self.new_samples and self.pause_training_till_n_train_samples:
+            while not self.new_inference_tuples and not self.new_training_tuples and self.pause_training_till_n_train_samples:
                 self.condition.wait(self.mutex)        
-            inference_tuples, self.inference_queue = self.inference_queue, []
-            new_samples, self.new_samples = self.new_samples, []
+            inference_tuples, self.new_inference_tuples = self.new_inference_tuples, []
+            training_tuples, self.new_training_tuples = self.new_training_tuples, []
             self.mutex.unlock()
             
             # Do inference
@@ -234,7 +234,7 @@ class ModelController(QThread):
                 self.inference_request.emit(samples, X)
 
             # Add new samples
-            for sample, X, y in new_samples:
+            for sample, X, y in training_tuples:
                 self.model_element.datasets[sample.type].add_training_tuple(sample, X, y)
                 if sample.type == "train":
                     self.pause_training_till_n_train_samples = max(0, self.pause_training_till_n_train_samples - 1)
@@ -242,6 +242,7 @@ class ModelController(QThread):
                 continue
 
             # Wait for new samples
+            # TODO: these constants are arbitrary
             if len(val_loss_per_epoch) > 50:
                 avg_recent_loss = np.array(val_loss_per_epoch[-25:]).mean()
                 avg_less_recent_loss = np.array(val_loss_per_epoch[-50:-25]).mean()
@@ -270,7 +271,7 @@ class ModelController(QThread):
             X (torch.Tensor): Input tensor of the sample.
         """
         self.mutex.lock()
-        self.inference_queue.append((sample, X))
+        self.new_inference_tuples.append((sample, X))
         self.condition.wakeAll()
         self.mutex.unlock()
 
@@ -285,6 +286,6 @@ class ModelController(QThread):
             y (torch.Tensor): Ground truth of the sample.
         """
         self.mutex.lock()
-        self.new_samples.append((sample, X, y))
+        self.new_training_tuples.append((sample, X, y))
         self.condition.wakeAll()
         self.mutex.unlock()
