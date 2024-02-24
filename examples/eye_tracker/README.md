@@ -92,7 +92,7 @@ python3 -m examples.eye_tracker.main --load_dataset my_dataset_1 my_dataset_2 --
 
 Example usage 4:
 
-You want to create a dataset without training a model, inference, or any gui.
+You want to create a dataset without training a model or inference.
 
 ```bash
 python3 -m examples.eye_tracker.main --save_dataset my_dataset --img_source webcam --gt_source simple-ball
