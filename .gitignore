@@ -5,4 +5,4 @@ __pycache__/
 examples/eye_tracker/datasets/*
 examples/eye_tracker/models/*
 # except the pretrained model
-!examples/eye_tracker/models/pretrained_default
+!examples/eye_tracker/models/pretrained_default/epoch_000000.pth
