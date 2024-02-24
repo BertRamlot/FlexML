@@ -229,8 +229,8 @@ class ModelController(QThread):
             
             # Do inference
             if len(inference_tuples) > 0:
-                samples = [sample for sample, _, _ in inference_tuples]
-                X = torch.stack([X for _, X, _ in inference_tuples])
+                samples = [sample for sample, _ in inference_tuples]
+                X = torch.stack([X for _, X in inference_tuples])
                 self.inference_request.emit(samples, X)
 
             # Add new samples

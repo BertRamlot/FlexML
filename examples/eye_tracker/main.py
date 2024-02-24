@@ -27,6 +27,7 @@ from examples.eye_tracker.src.GazeSample import GazeSampleMuxer
 
 # Config
 INITIAL_TRAIN_SAMPLES_REQ_BEFORE_TRAINING = 50
+SAVE_CHECKPOINT_EVERY_N_EPOCHS = 50
 TYPE_SUPPLIER = lambda : random.choices(["train", "val", "test"], [0.8, 0.15, 0.05])[0]
 MIN_TIME_BETWEEN_SAMPLES = 1.0
 LEARNING_RATE = 1e-3
@@ -111,7 +112,7 @@ if args.model:
         DATASET_CONFIGS,
         LOSS_FUNCTIONS
     )
-    model_controller = ModelController(model_element, INITIAL_TRAIN_SAMPLES_REQ_BEFORE_TRAINING)
+    model_controller = ModelController(model_element, INITIAL_TRAIN_SAMPLES_REQ_BEFORE_TRAINING, SAVE_CHECKPOINT_EVERY_N_EPOCHS)
     model_element.moveToThread(model_controller)
     link_QObjects(model_controller, model_element)
 else:
@@ -214,7 +215,8 @@ else:
     logging.info("Using headless event loop")
     global quiting
     quiting = False
-    signal.signal(signal.SIGINT, lambda _, __: globals().update({'quitting': True}))
+    signal.signal(signal.SIGINT, lambda _, __: globals().update({'quiting': True}))
     while not quiting:
         app.thread().eventDispatcher().processEvents(QEventLoop.ProcessEventsFlag.AllEvents)
         time.sleep(0.01)
+    logging.info("Quit headless event loop")
