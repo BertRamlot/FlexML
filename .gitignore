@@ -4,3 +4,5 @@ __pycache__/
 # Ignore any data/model
 examples/eye_tracker/datasets/*
 examples/eye_tracker/models/*
+# except the pretrained model
+!examples/eye_tracker/models/pretrained_default
