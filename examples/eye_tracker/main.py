@@ -2,7 +2,6 @@ import sys
 import queue
 import time
 import numpy as np
-import time
 import logging
 import signal
 import random
@@ -120,7 +119,6 @@ else:
     model_element = None
 
 logging.debug("Creating and linking live data sources")
-
 gt_src_thread = None if args.gt_source is None else GROUND_TRUTH_SOURCE_SUPPLIERS[args.gt_source]()
 img_src_thread = None if args.img_source is None else IMG_SOURCE_SUPPLIERS[args.img_source]()
 sample_muxer = GazeSampleMuxer(TYPE_SUPPLIER, screen_dims)
@@ -135,7 +133,7 @@ gaze_to_face_sample.moveToThread(sample_buffer)
 face_sample_tensorfier = FaceSampleTensorfier(args.device)
 # Enfore some time between samples to prevent:
 # (1) leakage btwn train/val/test datasets
-# (2) too similar samples within a dataset
+# (2) too similar samples within a single dataset
 def new_train_samples_filter_func(filtr, sample: Sample) -> bool:
     if sample.ground_truth is None:
         return False
@@ -150,7 +148,7 @@ def new_train_samples_filter_func(filtr, sample: Sample) -> bool:
 new_train_samples = Filter(new_train_samples_filter_func)
 link_QObjects(sample_muxer, sample_buffer, gaze_to_face_sample, new_train_samples)
 
-# TODO: kinda hacky
+# TODO: Make this more generic
 if isinstance(gt_src_thread, FeedbackBallSourceObject):
     link_QObjects((model_element, "sample_errors"), gt_src_thread)
 
@@ -162,14 +160,16 @@ if isinstance(gt_src_thread, FeedbackBallSourceObject):
     train_pair_to_sample_loss = TrainPairToSampleLoss()
     link_QObjects((face_sample_tensorfier, "train_tuples"), train_pair_to_sample_loss, gt_src_thread)    
 
+logging.debug("Linking training logic")
 if args.train:
     link_QObjects(new_train_samples, ("add_X_y_tensors", face_sample_tensorfier, "train_tuples"), model_controller)
 
+logging.debug("Linking inference logic")
 if args.inference:
     link_QObjects(gaze_to_face_sample, ("add_X_tensor", face_sample_tensorfier, "inference_tuples"), model_controller)
     link_QObjects((model_element, "inference_results"), ("register_predictions", overlay))
 
-# Save data to disk
+logging.debug("Creating and linking sample saving logic")
 if args.save_dataset:
     save_path = module_directory / Path("datasets") / args.save_dataset
     logging.info(f"Saving new samples in: {save_path}")

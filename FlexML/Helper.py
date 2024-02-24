@@ -3,19 +3,27 @@ import collections
 
 from PyQt6.QtCore import QThread, QObject, QEventLoop, pyqtSignal, pyqtSlot
 
-
+# TODO: BufferThread should be refactored into seperate pieces.
 class BufferThread(QThread):
+    """
+    QThread receives and emits items using the passed queue.
+    """
     new_item = pyqtSignal(object)
 
     def __init__(self, queue: queue.Queue):
-        super().__init__(None)
+        super().__init__()
         self._queue = queue
         self.start()
 
     @pyqtSlot(object)
     def push(self, item):
+        """
+        Pushes a new item into the queue, if possible.
+
+        Args:
+            item: The item to be pushed into the queue.
+        """
         try:
-            # TODO: cause infite recursions if condition is right
             self._queue.put_nowait(item)
         except queue.Full:
             pass
